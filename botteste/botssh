@@ -105,8 +105,7 @@ revenda() {
 ‼️FAÇA O PIX NA CHAVE ALEATÓRIA ACIMA E ENVIE SEU COMPROVANTE‼️🤝️"
       return 0
     }
-    
-menucompra() {
+
 unset botao2
 botao2=''
 ShellBot.InlineKeyboardButton --button 'botao2' --line 1 --text '1 LOGIN 10R$' --callback_data '1' --url "https://$netxx.xyz/vendas/comprar.php?id=$iduser%26login=1"
