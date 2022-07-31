@@ -105,14 +105,14 @@ revenda() {
 ‼️FAÇA O PIX NA CHAVE ALEATÓRIA ACIMA E ENVIE SEU COMPROVANTE‼️🤝️"
       return 0
     }
-
-# - funcao menu compra    
+    
 menucompra() {
-    botao2=''
-    ShellBot.InlineKeyboardButton --button 'botao2' --line 1 --text '1 LOGIN 10R$' --callback_data '1' --url "https://$netxx.xyz/vendas/comprar.php?id=$iduser%26login=1"
-    ShellBot.InlineKeyboardButton --button 'botao2' --line 2 --text '2 LOGIN 15R$' --callback_data '2' --url "https://$netxx.xyz/vendas/comprar.php?id=$iduser%26login=2""
-    ShellBot.InlineKeyboardButton --button 'botao2' --line 3 --text '3 LOGIN 20R$' --callback_data '3' --url "https://$netxx.xyz/vendas/comprar.php?id=$iduser%26login=3"
-    keyboard2="$(ShellBot.InlineKeyboardMarkup -b 'botao2')"
+unset botao2
+botao2=''
+ShellBot.InlineKeyboardButton --button 'botao2' --line 1 --text '1 LOGIN 10R$' --callback_data '1' --url "https://$netxx.xyz/vendas/comprar.php?id=$iduser%26login=1"
+ShellBot.InlineKeyboardButton --button 'botao2' --line 2 --text '2 LOGIN 15R$' --callback_data '2' --url "https://$netxx.xyz/vendas/comprar.php?id=$iduser%26login=2""
+ShellBot.InlineKeyboardButton --button 'botao2' --line 3 --text '3 LOGIN 20R$' --callback_data '3' --url "https://$netxx.xyz/vendas/comprar.php?id=$iduser%26login=3"
+keyboard2="$(ShellBot.InlineKeyboardMarkup -b 'botao2')"
 }
 
 #informacoes usuario
