@@ -130,17 +130,16 @@ unset keyboard1
 keyboard1="$(ShellBot.InlineKeyboardMarkup -b 'botao1')"
 
 fun_menucompra() {
-    iduser="$1"
-    url1="https://$dominio/vendas/comprar.php?id=$iduser%26login=1"
-    url2="https://$dominio/vendas/comprar.php?id=$iduser%26login=2"
-    url3="https://$dominio/vendas/comprar.php?id=$iduser%26login=3"
-    botao2=''
-    ShellBot.InlineKeyboardButton --button 'botao2' --line 1 --text '1 LOGIN 10R$' --callback_data '1' --url "$url1"
-    ShellBot.InlineKeyboardButton --button 'botao2' --line 2 --text '2 LOGIN 15R$' --callback_data '2' --url "$url2"
-    ShellBot.InlineKeyboardButton --button 'botao2' --line 3 --text '3 LOGIN 20R$' --callback_data '3' --url "$url3"
-    keyboard2="$(ShellBot.InlineKeyboardMarkup -b 'botao2')"
+iduser="$1"
+url1="https://$dominio/vendas/comprar.php?id=$iduser%26login=1"
+url2="https://$dominio/vendas/comprar.php?id=$iduser%26login=2"
+url3="https://$dominio/vendas/comprar.php?id=$iduser%26login=3"
+botao2=''
+ShellBot.InlineKeyboardButton --button 'botao2' --line 1 --text '1 LOGIN 10R$' --callback_data '1' --url "$url1"
+ShellBot.InlineKeyboardButton --button 'botao2' --line 2 --text '2 LOGIN 15R$' --callback_data '2' --url "$url2"
+ShellBot.InlineKeyboardButton --button 'botao2' --line 3 --text '3 LOGIN 20R$' --callback_data '3' --url "$url3"
+keyboard2="$(ShellBot.InlineKeyboardMarkup -b 'botao2')"
 }
-
 
 while :; do
    [[ "$(date +%d)" != "$(cat RESET)" ]] && {
