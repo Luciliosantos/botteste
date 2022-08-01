@@ -121,7 +121,6 @@ fun_menucompra() {
             --text "SELECIONE UMA OPÇÃO ABAIXO:" \
             --reply_markup "$(ShellBot.InlineKeyboardMarkup --button 'botao2')"
         return 0
-    }
 }
 
 #informacoes usuario
@@ -154,7 +153,6 @@ ShellBot.regHandleFunction --function enviarapp --callback_data appenviar
 ShellBot.regHandleFunction --function criaruser --callback_data usercriar
 unset keyboard2
 keyboard2="$(ShellBot.InlineKeyboardMarkup -b 'botao2')"
-
 while :; do
    [[ "$(date +%d)" != "$(cat RESET)" ]] && {
    	echo $(date +%d) > RESET
