@@ -109,7 +109,7 @@ enviarapp() {
     return 0
 }
 
-menucompra() {
+fun_menucompra() {
     [[ "$(grep -wc ${callback_query_from_username} $suspensos)" != '0' ]] && {
         ShellBot.answerCallbackQuery --callback_query_id ${callback_query_id[$id]} \
             --text "⚠️ VC ESTA SUSPENSO! CONTATE O ADMINISTRADOR"
@@ -119,7 +119,7 @@ menucompra() {
         ShellBot.editMessageText --chat_id ${callback_query_message_chat_id[$id]} \
             --message_id ${callback_query_message_message_id[$id]} \
             --text "SELECIONE UMA OPÇÃO ABAIXO:" \
-            --reply_markup "$(ShellBot.InlineKeyboardMarkup --button 'menu1')"
+            --reply_markup "$(ShellBot.InlineKeyboardMarkup --button 'botao2')"
         return 0
     }
 }
@@ -139,23 +139,22 @@ ShellBot.InlineKeyboardButton --button 'botao1' --line 2 --text '♻️COMPRAR P
 ShellBot.InlineKeyboardButton --button 'botao1' --line 3 --text '🔰BAIXAR APLICATIVO🔰' --callback_data 'appenviar'
 ShellBot.regHandleFunction --function criarteste --callback_data gerarssh
 ShellBot.regHandleFunction --function enviarapp --callback_data appenviar
-ShellBot.regHandleFunction --function menucompra --callback_data menucompra
+ShellBot.regHandleFunction --function fun_menucompra --callback_data menucompra
 ShellBot.regHandleFunction --function criaruser --callback_data usercriar
-
 unset keyboard1
 keyboard1="$(ShellBot.InlineKeyboardMarkup -b 'botao1')"
 
-unset menu1
-menu1=''
-ShellBot.InlineKeyboardButton --button 'menu1' --line 1 --text '♻️TESTE♻️' --callback_data 'gerarssh'
-ShellBot.InlineKeyboardButton --button 'menu1' --line 2 --text '♻️TESTE♻️' --callback_data 'menucompra'
-ShellBot.InlineKeyboardButton --button 'menu1' --line 3 --text '🔰TESTE🔰' --callback_data 'appenviar'
+unset botao2
+botao2=''
+ShellBot.InlineKeyboardButton --button 'botao2' --line 1 --text '♻️TESTE♻️' --callback_data 'gerarssh'
+ShellBot.InlineKeyboardButton --button 'botao2' --line 2 --text '♻️TESTE♻️' --callback_data 'menucompra'
+ShellBot.InlineKeyboardButton --button 'botao2' --line 3 --text '🔰TESTE🔰' --callback_data 'appenviar'
 ShellBot.regHandleFunction --function criarteste --callback_data gerarssh
 ShellBot.regHandleFunction --function enviarapp --callback_data appenviar
 ShellBot.regHandleFunction --function criaruser --callback_data usercriar
-
 unset keyboard2
 keyboard2="$(ShellBot.InlineKeyboardMarkup -b 'botao2')"
+
 while :; do
    [[ "$(date +%d)" != "$(cat RESET)" ]] && {
    	echo $(date +%d) > RESET
