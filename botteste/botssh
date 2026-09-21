@@ -29,24 +29,26 @@ function enviar($d){
         CURLOPT_POSTFIELDS => http_build_query($d),
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
+        CURLOPT_CONNECTTIMEOUT => 3,
         CURLOPT_TIMEOUT => 5
     ]);
     curl_exec($ch); curl_close($ch);
 }
 
-echo "✅ BOT CORRIGIDO ATIVO\n";
+echo "✅ BOT RÁPIDO + CORRIGIDO\n";
 
 while(true){
-    $ch = curl_init($api."getUpdates?offset=$offset&timeout=2");
+    $ch = curl_init($api."getUpdates?offset=$offset&timeout=1");
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_TIMEOUT => 4
+        CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TIMEOUT => 3
     ]);
     $resp = curl_exec($ch); curl_close($ch);
     
     $dados = json_decode($resp, true);
-    if(!isset($dados['result'])){ usleep(150000); continue; }
+    if(!isset($dados['result'])){ usleep(50000); continue; }
     
     foreach($dados['result'] as $u){
         $offset = $u['update_id'] + 1;
@@ -90,9 +92,12 @@ while(true){
         }
 
         // === ESCOLHEU OPERADORA → MOSTRA VALORES ===
-        if(str_starts_with($cb, 'op_')){
+        if(substr($cb, 0, 3) === 'op_'){
             $op = substr($cb, 3);
-            if(!isset($recargas[$op])) continue;
+            if(!isset($recargas[$op])){
+                enviar(['chat_id'=>$cid,'text'=>'❌ Operadora inválida!','parse_mode'=>'html']);
+                continue;
+            }
             $sessao[$cid]['op'] = $op;
             
             $kb = ['inline_keyboard' => []];
@@ -106,15 +111,18 @@ while(true){
         }
 
         // === ESCOLHEU VALOR → Pede NÚMERO ===
-        if(str_starts_with($cb, 'val_')){
+        if(substr($cb, 0, 4) === 'val_'){
             $partes = explode('_', $cb);
+            if(count($partes) < 3) continue;
             $op = $partes[1];
             $valor = (float)$partes[2];
+            if(!isset($recargas[$op])) continue;
+            
             $sessao[$cid]['op'] = $op;
             $sessao[$cid]['valor'] = $valor;
             $sessao[$cid]['etapa'] = 'pedir_numero';
             
-            enviar(['chat_id'=>$cid,'text'=>"✅ Valor escolhido: <b>R$ ".number_format($valor,2,',','')."</b>\nDigite o número com DDD (ex: 11988887777):",'parse_mode'=>'html']);
+            enviar(['chat_id'=>$cid,'text'=>"✅ Valor: <b>R$ ".number_format($valor,2,',','')."</b>\nDigite o número com DDD (ex: 11988887777):",'parse_mode'=>'html']);
             continue;
         }
 
@@ -122,7 +130,7 @@ while(true){
         if(($sessao[$cid]['etapa'] ?? '') === 'pedir_numero' && $txt){
             $numero = preg_replace('/[^0-9]/', '', $txt);
             if(strlen($numero) < 10 || strlen($numero) > 11){
-                enviar(['chat_id'=>$cid,'text'=>'❌ Número inválido! Digite com DDD, apenas números. Ex: 11988887777','parse_mode'=>'html']);
+                enviar(['chat_id'=>$cid,'text'=>'❌ Inválido! Digite com DDD, só números. Ex: 11988887777','parse_mode'=>'html']);
                 continue;
             }
             $op = $sessao[$cid]['op'];
@@ -136,7 +144,7 @@ while(true){
                     [['text'=>'❌ Cancelar','callback_data'=>'recarga_lista']]
                 ]
             ];
-            enviar(['chat_id'=>$cid,'text'=>"<b>📋 RESUMO DA RECARGA</b>\nOperadora: {$recargas[$op]['nome']}\nNúmero: <code>$numero</code>\nValor: <b>R$ ".number_format($valor,2,',','')."</b>\nConfirma?",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+            enviar(['chat_id'=>$cid,'text'=>"<b>📋 RESUMO</b>\nOperadora: {$recargas[$op]['nome']}\nNúmero: <code>$numero</code>\nValor: <b>R$ ".number_format($valor,2,',','')."</b>\nConfirma?",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
             continue;
         }
 
@@ -147,14 +155,14 @@ while(true){
             $numero = $sessao[$cid]['numero'];
             
             if($admin && $admin !== $cid){
-                enviar(['chat_id'=>$admin,'text'=>"🔔 NOVA RECARGA SOLICITADA\n\nOperadora: {$recargas[$op]['nome']}\nNúmero: <code>$numero</code>\nValor: R$ ".number_format($valor,2,',','')."\nCliente ID: <code>$cid</code>",'parse_mode'=>'html']);
+                enviar(['chat_id'=>$admin,'text'=>"🔔 NOVA RECARGA\n\nOperadora: {$recargas[$op]['nome']}\nNúmero: <code>$numero</code>\nValor: R$ ".number_format($valor,2,',','')."\nCliente: <code>$cid</code>",'parse_mode'=>'html']);
             }
-            enviar(['chat_id'=>$cid,'text'=>'✅ <b>PEDIDO RECEBIDO!</b>\nEstamos processando sua recarga. Em breve será creditado! 💳','parse_mode'=>'html']);
+            enviar(['chat_id'=>$cid,'text'=>'✅ <b>PEDIDO RECEBIDO!</b>\nProcessando via RecargaPay 💳','parse_mode'=>'html']);
             unset($sessao[$cid]);
             continue;
         }
 
-        // === DEMAIS FUNÇÕES ===
+        // === SSH GRÁTIS ===
         if($cb === '/ssh'){
             $usuario = substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 5);
             $senha = rand(11111, 99999);
@@ -164,10 +172,11 @@ while(true){
             } else {
                 exec("useradd -M -s /bin/false $usuario && echo \"$usuario:$senha\" | chpasswd");
             }
-            enviar(['chat_id'=>$cid,'text'=>"✅ <b>CONTA SSH CRIADA!</b>\nUsuário: <code>$usuario</code>\nSenha: <code>$senha</code>\nValidade: 1 dia",'parse_mode'=>'html']);
+            enviar(['chat_id'=>$cid,'text'=>"✅ <b>CONTA CRIADA!</b>\nUsuário: <code>$usuario</code>\nSenha: <code>$senha</code>\nValidade: 1 dia",'parse_mode'=>'html']);
             continue;
         }
 
+        // === PIX ===
         if($cb === '/pix'){
             enviar(['chat_id'=>$cid,'text'=>'⏳ Gerando PIX...','parse_mode'=>'html']);
             $pagamento = [
@@ -180,10 +189,7 @@ while(true){
             curl_setopt_array($ch, [
                 CURLOPT_POST => 1,
                 CURLOPT_POSTFIELDS => json_encode($pagamento),
-                CURLOPT_HTTPHEADER => [
-                    "Content-Type: application/json",
-                    "Authorization: Bearer $mp_token"
-                ],
+                CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer $mp_token"],
                 CURLOPT_RETURNTRANSFER => 1,
                 CURLOPT_SSL_VERIFYPEER => 0,
                 CURLOPT_TIMEOUT => 10
@@ -194,9 +200,9 @@ while(true){
             $id_pag = $dados_mp['id'] ?? '';
             
             if($pix_copia && $id_pag){
-                enviar(['chat_id'=>$cid,'text'=>"💵 <b>PIX GERADO!</b>\nCopie e pague:\n<code>$pix_copia</code>\nAguardando confirmação...",'parse_mode'=>'html']);
+                enviar(['chat_id'=>$cid,'text'=>"💵 <b>PIX GERADO!</b>\nCopie e pague:\n<code>$pix_copia</code>",'parse_mode'=>'html']);
             } else {
-                enviar(['chat_id'=>$cid,'text'=>'❌ Erro ao gerar PIX. Tente novamente.','parse_mode'=>'html']);
+                enviar(['chat_id'=>$cid,'text'=>'❌ Erro ao gerar PIX','parse_mode'=>'html']);
             }
             continue;
         }
@@ -206,9 +212,9 @@ while(true){
             continue;
         }
         if($cb === '/minhaconta'){
-            enviar(['chat_id'=>$cid,'text'=>'📋 <b>MINHA CONTA</b>\nEm breve disponível!','parse_mode'=>'html']);
+            enviar(['chat_id'=>$cid,'text'=>'📋 <b>MINHA CONTA</b>\nEm breve!','parse_mode'=>'html']);
             continue;
         }
     }
-    usleep(150000);
+    usleep(50000);
 }
