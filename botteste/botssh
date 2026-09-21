@@ -10,7 +10,7 @@ cat <<'EOF' > /root/bot/bot.php
  $token = (string)$iniParse['token'];
  $limite = (int)$iniParse['limite'];
  // INSIRA SEU ACCESS TOKEN REAL DO MERCADO PAGO ENTRE AS ASPAS SE QUISER ATUALIZAR
- $mp_access_token = "APP_USR-8318285513511394-092017-9159d3e8a4a58064cfb2c86b24d777e5-199482701"; 
+ $mp_access_token = "APP_USR-7527190269570273-090920-8e00f0eee8a23cb2fdd7f7d8db4a4dbf-226024458"; 
  $api_url = "https://api.telegram.org/bot" . $token . "/";
  $offset = 0;
  function enviarMensagemRapida($url, $dados) {
@@ -51,7 +51,7 @@ cat <<'EOF' > /root/bot/bot.php
                      $keyboard = [
                          'inline_keyboard' => [
                              [['text' => '🇧🇷 SSH Gratis BR 🚀', 'callback_data' => '/sshgratis']],
-                             [['text' => '💵 Comprar 30 Dias 🚀', 'callback_data' => '/pix']]
+                             [['text' => '💵 COMPRA MENSAL🚀', 'callback_data' => '/pix']]
                          ]
                      ];
                      $msg_start = isset($textoMsg['start']) ? $textoMsg['start'] : "🤖 Bem-vindo ao Gerenciador SSH!";
