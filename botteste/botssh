@@ -10,14 +10,13 @@ $ip = (string)$iniParse['ip'];
 $token = (string)$iniParse['token'];
 $limite = (int)$iniParse['limite'];
 
-$mp_access_token = "APP_USR-7527190269570273-090920-8e00f0eee8a23cb2fdd7f7d8db4a4dbf-226024458"; 
-$valor_item = 20.00; 
+$mp_access_token = "APP_USR-7527190269570273-090920-8e00f0eee8a23cb2fdd7f7d8db4a4dbf-226024458";
+$valor_item = 20.00;
 
 $api_url = "https://api.telegram.org/bot" . $token . "/";
 $offset = 0;
 $sessao = [];
 
-// ========== VALORES DAS RECARGAS ==========
 $recargas = [
     'vivo' => [
         'nome' => '📱 VIVO',
@@ -37,18 +36,16 @@ $recargas = [
     ]
 ];
 
-// ========== SEU ID — JÁ CONFIGURADO ✅ ==========
 $seu_id_admin = 7761133138;
 
 function enviarMensagemRapida($url, $dados) {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url . "sendMessage");
+    $ch = curl_init($url . "sendMessage");
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($dados));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
     curl_exec($ch);
     curl_close($ch);
 }
@@ -56,13 +53,9 @@ function enviarMensagemRapida($url, $dados) {
 echo "BOT ATUALIZADO — Recarga + Serviços\n";
 
 while (true) {
-    $url = $api_url . "getUpdates?offset=" . $offset . "&timeout=1";
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
+    $ch = curl_init($api_url . "getUpdates?offset=" . $offset . "&timeout=5");
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
     $response = curl_exec($ch);
     curl_close($ch);
     
@@ -227,7 +220,6 @@ while (true) {
                 $valor = $sessao[$chat_id]['valor'];
                 $numero = $sessao[$chat_id]['numero'];
                 
-                // 🔔 AVISA VOCÊ — JÁ CONFIGURADO ✅
                 if ($seu_id_admin && $seu_id_admin !== $chat_id) {
                     enviarMensagemRapida($api_url, [
                         'chat_id' => $seu_id_admin,
@@ -236,7 +228,6 @@ while (true) {
                     ]);
                 }
                 
-                // ✅ AVISA O CLIENTE
                 enviarMensagemRapida($api_url, [
                     'chat_id' => $chat_id,
                     'text' => "✅ <b>PEDIDO RECEBIDO!</b>\n\nEstou processando sua recarga agora pelo RecargaPay 💳\nEm instantes te confirmo aqui! ⏳",
@@ -247,7 +238,7 @@ while (true) {
                 continue;
             }
 
-            // ========== FUNÇÕES ORIGINAIS — NÃO MEXE ==========
+            // ========== SSH GRÁTIS ==========
             if ($cb_dados === '/sshgratis') {
                 $usuario = substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 5);
                 $senha = mt_rand(11111, 99999);
@@ -275,6 +266,7 @@ while (true) {
                 continue;
             }
             
+            // ========== PIX / COMPRAR ==========
             if ($cb_dados === '/pix') {
                 enviarMensagemRapida($api_url, [
                     'chat_id' => $chat_id,
@@ -306,8 +298,8 @@ while (true) {
                 curl_close($ch_mp);
 
                 $json_mp = json_decode($mp_response, true);
-                $pix_copia_cola = isset($json_mp['point_of_interaction']['transaction_data']['qr_code']) ? $json_mp['point_of_interaction']['transaction_data']['qr_code'] : null;
-                $payment_id = isset($json_mp['id']) ? $json_mp['id'] : null;
+                $pix_copia_cola = $json_mp['point_of_interaction']['transaction_data']['qr_code'] ?? null;
+                $payment_id = $json_mp['id'] ?? null;
 
                 if ($pix_copia_cola && $payment_id) {
                     $msg_pix = "<a href=\"https://t.me/lssilvae\">💵 PIX GERADO COM SUCESSO 💵</a>\n";
@@ -333,7 +325,7 @@ while (true) {
                         curl_close($ch_verificar);
 
                         $json_check = json_decode($check_response, true);
-                        $status_pagamento = isset($json_check['status']) ? $json_check['status'] : 'pending';
+                        $status_pagamento = $json_check['status'] ?? 'pending';
 
                         if ($status_pagamento === 'approved') {
                             $usuario = "VIP" . mt_rand(11, 99) . substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 3);
