@@ -1,170 +1,187 @@
-#!/bin/bash
-clear
-#--------@TECHNET-----------#
-source ShellBot.sh
-touch lista
-[[ -z $1 ]] && {
-    clear && echo "INFORME O TOKEN" && return 0
-}
-[[ ! -e RESET ]] && touch RESET
-api_bot=$1
-ShellBot.init --token "$api_bot" --monitor --flush
-ShellBot.username
-
-# - Funcao menu
-menu() {
-    local msg
-        msg="=×=×=×=×=×𝐓𝐄𝐂𝐇 𝐍𝐄𝐓×=×=×=×=×=×=\n"
-        msg+="<b>🏁GERE LOGINS O QUANTO QUISER🏁</b>\n"
-        
-        msg+="<b>PARA COMPRAR 30 DIAS DIRETO👉@NETxL4</b>\n"
-        msg+="=×=×=×=×=×=×=×=×=×=×=×=×=×=×=×=×=\n\n"
-        ShellBot.sendMessage --chat_id ${message_chat_id[$id]} \
-        --text "$(echo -e $msg)" \
-        --reply_markup "$keyboard1" \
-        --parse_mode html
-        return 0
-}
-
-# - funcao criar ssh
-criarteste() {
-  [[ $(grep -wc ${callback_query_from_id} permitidos) != '0' ]] && {
-    usuario=$(echo teste$(( RANDOM% + 99999 )))
-    senha=$((RANDOM% + 99999))
-    limite='1'
-    tempo='2'
-    tuserdate=$(date '+%C%y/%m/%d' -d " +1 days")
-    useradd -M -N -s /bin/false $usuario -e $tuserdate > /dev/null 2>&1
-    (echo "$senha";echo "$senha") | passwd $usuario > /dev/null 2>&1
-    echo "$senha" > /etc/SSHPlus/senha/$usuario
-    echo "$usuario $limite" >> /root/usuarios.db
-    echo "#!/bin/bash
-pkill -f "$usuario"
-userdel --force $usuario
-grep -v ^$usuario[[:space:]] /root/usuarios.db > /tmp/ph ; cat /tmp/ph > /root/usuarios.db
-rm /etc/SSHPlus/senha/$usuario > /dev/null 2>&1
-rm -rf /etc/SSHPlus/userteste/$usuario.sh" > /etc/SSHPlus/userteste/$usuario.sh
-    chmod +x /etc/SSHPlus/userteste/$usuario.sh
-    at -f /etc/SSHPlus/userteste/$usuario.sh now + $tempo hour > /dev/null 2>&1
-    echo ${callback_query_from_id} >> lista
-    # - ENVIA O SSH
-    ShellBot.sendMessage --chat_id ${callback_query_message_chat_id} \
-    --text "$(echo -e "✅ <b>CRIADO COM SUCESSO</b> ✅\n\nIP: 𝐒𝐄𝐑𝐕𝐈𝐃𝐎𝐑 𝐅𝐑𝐄𝐄\n𝐔𝐒𝐔𝐀𝐑𝐈𝐎👉: <code>$usuario</code>\n𝐒𝐄𝐍𝐇𝐀👉: <code>$senha</code>\n\n⏳ Expira em: $tempo Horas")" \
-    --parse_mode html
-    return 0
-  }
-  ShellBot.sendMessage --chat_id ${callback_query_message_chat_id} \
-        --text "VOCÊ NÃO TEM PERMISSÃO"
-      return 0
-}
-
-criaruser() {
-  [[ $(grep -wc ${callback_query_from_id} permitidos) != '0' ]] && {
-    user=${callback_query_from_id}
-    _limTotal=$(grep -w 'LIMITE_REVENDA' $HOME/BOT/revenda/$user/$user | awk '{print $NF}')
-    limite='0'
-    padrao="1"
-    [[ "$limite" == "$_limTotal" ]] && {
-      ShellBot.sendMessage --chat_id ${callback_query_message_chat_id} \
-        --text "VOCÊ NÃO TEM SALDO DISPONIVEL"
-      return 0
-    }
-
-    IP=$(cat /etc/IP)
-    usuario=$(echo user$(( RANDOM% + 99999 )))
-    senha=$((RANDOM% + 99999))
-    limite='1'
-    dias='31'
-    [[ "$(grep -wc $usuario /etc/passwd)" != '0' ]] && {
-    ShellBot.sendMessage --chat_id ${callback_query_message_chat_id} \
-        --text "USUARIO GERADO JÁ FOI CADASTRADO, TENTE NOVAMENTE"
-      return 0
-    }
-    final=$(date "+%Y-%m-%d" -d "+$dias days")
-    gui=$(date "+%d/%m/%Y" -d "+$dias days")
-    pass=$(perl -e 'print crypt($ARGV[0], "password")' $senha)
-    useradd -e $final -M -s /bin/false -p $pass $usuario >/dev/null 2>&1 &
-    echo "$usuario $limite" >>/root/usuarios.db
-    echo "$senha" >/etc/SSHPlus/senha/$usuario
-    echo "usuario $usuario $validade $senha criado"
-    echo "$usuario:$senha:$info_data:$limite" >$HOME/BOT/revenda/$user/usuarios/$usuario
-    novolimite=$[_limTotal - padrao]
-    sed -i "s/LIMITE_REVENDA: $_limTotal/LIMITE_REVENDA: $novolimite/g" $HOME/BOT/revenda/$user/$user >/dev/null 2>&1
-    ShellBot.sendMessage --chat_id ${callback_query_message_chat_id} \
-    --text "$(echo -e "✅ <b>Criado com sucesso</b> ✅\n\nIP: $(cat /etc/IP)\nUSUARIO: <code>$usuario</code>\nSENHA: <code>$senha</code>\n\n⏳ Expira em: 31 Dias")" \
-    --parse_mode html
-    return 0
-  }
-  ShellBot.sendMessage --chat_id ${callback_query_message_chat_id} \
-        --text "VOCÊ NÃO TEM PERMISSÃO"
-      return 0
-}
-
-#enviar app
-enviarapp() {
-    ShellBot.answerCallbackQuery --callback_query_id ${callback_query_id[$id]} \
-        --text "♻️ ENVIANDO APLICATIVO, AGUARDE..."
-    ShellBot.sendDocument --chat_id ${callback_query_message_chat_id} \
-        --document "@/root/TechNet.apk" \
-    return 0
-}
-
-fun_menucompra() {
-    [[ "$(grep -wc ${callback_query_from_username} $suspensos)" != '0' ]] && {
-        ShellBot.answerCallbackQuery --callback_query_id ${callback_query_id[$id]} \
-            --text "⚠️ VC ESTA SUSPENSO! CONTATE O ADMINISTRADOR"
-        return 0
-    }
-    [[ "${callback_query_from_id[$id]}" == "$id_admin" ]] || [[ "$(grep -wc ${callback_query_from_username} $ativos)" != '0' ]] && {
-        ShellBot.editMessageText --chat_id ${callback_query_message_chat_id[$id]} \
-            --message_id ${callback_query_message_message_id[$id]} \
-            --text "SELECIONE UMA OPÇÃO ABAIXO:" \
-            --reply_markup "$(ShellBot.InlineKeyboardMarkup --button 'botao2')"
-        return 0
-}
-
-#informacoes usuario
-infouser () {
-	ShellBot.sendMessage --chat_id ${message_chat_id[$id]} \
-	--text "$(echo -e "Nome:  ${message_from_first_name[$(ShellBot.ListUpdates)]}\nUser: @${message_from_username[$(ShellBot.ListUpdates)]:-null}")\nID: ${message_from_id[$(ShellBot.ListUpdates)]} " \
-	--parse_mode html
-	return 0
-}
-
-unset botao1
-botao1=''
-ShellBot.InlineKeyboardButton --button 'botao1' --line 1 --text '♻️GERAR LOGIN E SENHA♻️' --callback_data 'gerarssh'
-ShellBot.InlineKeyboardButton --button 'botao1' --line 2 --text '♻️COMPRAR PRO♻️' --callback_data 'menucompra'
-ShellBot.InlineKeyboardButton --button 'botao1' --line 3 --text '🔰BAIXAR APLICATIVO🔰' --callback_data 'appenviar'
-ShellBot.regHandleFunction --function criarteste --callback_data gerarssh
-ShellBot.regHandleFunction --function enviarapp --callback_data appenviar
-ShellBot.regHandleFunction --function fun_menucompra --callback_data menucompra
-ShellBot.regHandleFunction --function criaruser --callback_data usercriar
-unset keyboard1
-keyboard1="$(ShellBot.InlineKeyboardMarkup -b 'botao1')"
-
-unset botao2
-botao2=''
-ShellBot.InlineKeyboardButton --button 'botao2' --line 1 --text '♻️TESTE♻️' --callback_data 'gerarssh'
-ShellBot.InlineKeyboardButton --button 'botao2' --line 2 --text '♻️TESTE♻️' --callback_data 'menucompra'
-ShellBot.InlineKeyboardButton --button 'botao2' --line 3 --text '🔰TESTE🔰' --callback_data 'appenviar'
-ShellBot.regHandleFunction --function criarteste --callback_data gerarssh
-ShellBot.regHandleFunction --function enviarapp --callback_data appenviar
-ShellBot.regHandleFunction --function criaruser --callback_data usercriar
-unset keyboard2
-keyboard2="$(ShellBot.InlineKeyboardMarkup -b 'botao2')"
-while :; do
-   [[ "$(date +%d)" != "$(cat RESET)" ]] && {
-   	echo $(date +%d) > RESET
-   	echo ' ' > lista
+cat <<'EOF' > /root/bot/bot.php
+ <?php
+ if (!file_exists('dadosBot.ini')){
+     echo "Configuracao nao encontrada!\n";
+     exit;
+ }
+ $textoMsg = json_decode(file_get_contents('textos.json'), true);
+ $iniParse = parse_ini_file('dadosBot.ini');
+ $ip = (string)$iniParse['ip'];
+ $token = (string)$iniParse['token'];
+ $limite = (int)$iniParse['limite'];
+ // INSIRA SEU ACCESS TOKEN REAL DO MERCADO PAGO ENTRE AS ASPAS SE QUISER ATUALIZAR
+ $mp_access_token = "APP_USR-8318285513511394-092017-9159d3e8a4a58064cfb2c86b24d777e5-199482701"; 
+ $api_url = "https://api.telegram.org/bot" . $token . "/";
+ $offset = 0;
+ function enviarMensagemRapida($url, $dados) {
+     $ch = curl_init();
+     curl_setopt($ch, CURLOPT_URL, $url . "sendMessage");
+     curl_setopt($ch, CURLOPT_POST, true);
+     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($dados));
+     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+     curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+     curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+     curl_exec($ch);
+     curl_close($ch);
+ }
+ echo "BOT AUTOMATICO INTEGRADO COM SUCESSO!\n";
+ while (true) {
+     $url = $api_url . "getUpdates?offset=" . $offset . "&timeout=1";
+     $ch = curl_init();
+     curl_setopt($ch, CURLOPT_URL, $url);
+     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+     curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+     curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+     $response = curl_exec($ch);
+     curl_close($ch);
+     
+     $updates = json_decode($response, true);
+     
+     if (isset($updates['result']) && is_array($updates['result'])) {
+         foreach ($updates['result'] as $update) {
+             $offset = $update['update_id'] + 1;
+             
+             if (isset($update['message']['text'])) {
+                 $chat_id = $update['message']['chat']['id'];
+                 $text = $update['message']['text'];
+                 
+                 if ($text == '/start') {
+                     $keyboard = [
+                         'inline_keyboard' => [
+                             [['text' => '🇧🇷 SSH Gratis BR 🚀', 'callback_data' => '/sshgratis']],
+                             [['text' => '💵 Comprar 30 Dias 🚀', 'callback_data' => '/pix']]
+                         ]
+                     ];
+                     $msg_start = isset($textoMsg['start']) ? $textoMsg['start'] : "🤖 Bem-vindo ao Gerenciador SSH!";
+                     enviarMensagemRapida($api_url, [
+                         'chat_id' => $chat_id,
+                         'text' => $msg_start,
+                         'parse_mode' => 'html',
+                         'reply_markup' => json_encode($keyboard)
+                     ]);
+                 }
+             }
+             
+             if (isset($update['callback_query'])) {
+                 $callback_id = $update['callback_query']['id'];
+                 $chat_id = $update['callback_query']['message']['chat']['id'];
+                 $data = $update['callback_query']['data'];
+                 $user_id = $update['callback_query']['from']['id'];
+                 
+                 $ch_ans = curl_init($api_url . "answerCallbackQuery?callback_query_id=" . $callback_id);
+                 curl_setopt($ch_ans, CURLOPT_RETURNTRANSFER, true);
+                 curl_setopt($ch_ans, CURLOPT_SSL_VERIFYPEER, false);
+                 curl_setopt($ch_ans, CURLOPT_TIMEOUT, 2);
+                 curl_exec($ch_ans);
+                 curl_close($ch_ans);
+                 
+                 if ($data == '/sshgratis') {
+                     $usuario = substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 5);
+                     $senha = mt_rand(11111, 99999);
+                     @chmod('gerarusuario.sh', 0755);
+                     if (file_exists('gerarusuario.sh')) {
+                         exec('./gerarusuario.sh ' . $usuario . ' ' . $senha . ' 1 1');
+                     } else {
+                         exec('useradd -M -s /bin/false ' . $usuario . ' && echo "' . $usuario . ':' . $senha . '" | chpasswd');
+                     }
+                     $textoSSH = "Conta SSH criada ;) \r\n\r\n<b>Servidor:</b> " . $ip . "\r\n<b>Usuário:</b> " . $usuario . "\r\n<b>Senha:</b> " . $senha;
+                     enviarMensagemRapida($api_url, [
+                         'chat_id' => $chat_id,
+                         'text' => $textoSSH,
+                         'parse_mode' => 'html'
+                     ]);
+                 }
+                 
+                 if ($data == '/pix') {
+                     enviarMensagemRapida($api_url, [
+                         'chat_id' => $chat_id,
+                         'text' => "⏳ <i>Gerando seu PIX Copia e Cola exclusivo... Aguarde.</i>",
+                         'parse_mode' => 'html'
+                     ]);
+                     $valor_item = 20.00; 
+                     $pagamento_dados = [
+                         "transaction_amount" => $valor_item,
+                         "description" => "Compra de Acesso SSH 30 Dias",
+                         "payment_method_id" => "pix",
+                         "payer" => [
+                             "email" => "cliente_bot@gmail.com",
+                             "first_name" => "Cliente",
+                             "last_name" => "Telegram"
+                         ]
+                     ];
+                     $ch_mp = curl_init("https://api.mercadopago.com/v1/payments");
+                     curl_setopt($ch_mp, CURLOPT_RETURNTRANSFER, true);
+                     curl_setopt($ch_mp, CURLOPT_POST, true);
+                     curl_setopt($ch_mp, CURLOPT_POSTFIELDS, json_encode($pagamento_dados));
+                     curl_setopt($ch_mp, CURLOPT_HTTPHEADER, [
+                         "Content-Type: application/json",
+                         "Authorization: Bearer " . $mp_access_token
+                     ]);
+                     curl_setopt($ch_mp, CURLOPT_SSL_VERIFYPEER, false);
+                     $mp_response = curl_exec($ch_mp);
+                     curl_close($ch_mp);
+                     $json_mp = json_decode($mp_response, true);
+                     $pix_copia_cola = isset($json_mp['point_of_interaction']['transaction_data']['qr_code']) ? $json_mp['point_of_interaction']['transaction_data']['qr_code'] : null;
+                     $payment_id = isset($json_mp['id']) ? $json_mp['id'] : null;
+                     if ($pix_copia_cola && $payment_id) {
+                         $msg_pix = "💵 <b>PIX GERADO COM SUCESSO</b> 💵\n\nCopie o código abaixo e pague no seu aplicativo do banco:\n\n<code>" . $pix_copia_cola . "</code>\n\n⏱️ <b>O sistema está checando seu pagamento automaticamente. Assim que pagar, sua conta será entregue aqui!</b>";
+                         enviarMensagemRapida($api_url, [
+                             'chat_id' => $chat_id,
+                             'text' => $msg_pix,
+                             'parse_mode' => 'html'
+                         ]);
+                         for ($tentativa = 0; $tentativa < 150; $tentativa++) {
+                             sleep(2);
+                             $ch_verificar = curl_init("https://api.mercadopago.com/v1/payments/" . $payment_id);
+                             curl_setopt($ch_verificar, CURLOPT_RETURNTRANSFER, true);
+                             curl_setopt($ch_verificar, CURLOPT_HTTPHEADER, ["Authorization: Bearer " . $mp_access_token]);
+                             curl_setopt($ch_verificar, CURLOPT_SSL_VERIFYPEER, false);
+                             $check_response = curl_exec($ch_verificar);
+                             curl_close($ch_verificar);
+                             $json_check = json_decode($check_response, true);
+                             $status_pagamento = isset($json_check['status']) ? $json_check['status'] : 'pending';
+                             if ($status_pagamento == 'approved') {
+                                 $usuario = "VIP" . mt_rand(11, 99) . substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 3);
+                                 $senha = mt_rand(1111, 9999);
+                                 
+                                 @chmod('gerarusuario.sh', 0755);
+                                 if (file_exists('gerarusuario.sh')) {
+                                     exec('./gerarusuario.sh ' . $usuario . ' ' . $senha . ' 30 1');
+                                 } else {
+                                     exec('useradd -M -s /bin/false ' . $usuario . ' && echo "' . $usuario . ':' . $senha . '" | chpasswd');
+                                 }
+                                 $textoAcesso = "✅ <b>PAGAMENTO CONFIRMADO!</b> ✅\n\nSua conta Premium de 30 dias foi criada com sucesso:\n\n<b>Servidor:</b> " . $ip . "\n<b>Usuário:</b> " . $usuario . "\n<b>Senha:</b> " . $senha . "\n\nObrigado pela compra!";
+                                 enviarMensagemRapida($api_url, [
+                                     'chat_id' => $chat_id,
+                                     'text' => $textoAcesso,
+                                     'parse_mode' => 'html'
+                                 ]);
+                                 break;
+                             }
+                         }
+                     } else {
+                         enviarMensagemRapida($api_url, [
+                             'chat_id' => $chat_id,
+                             'text' => "❌ Erro ao gerar PIX. Verifique seu Access Token do Mercado Pago.",
+                             'parse_mode' => 'html'
+                         ]);
+                     }
+                 }
+             }
+         }
+     }
+     usleep(500000);
+ }
+ EOF
+ cat <<'EOF' > /root/bot/textos.json
+ {
+   "start": "😊 Para comprar sua SSH/EHI de 30 dias entre para nosso grupo de vendas @NETxx0 , você também pode ganhar uma renda extra com o nosso Painel de Revenda",
+   "sshgratis": {
+     "nao_criado": "🙃 Você já criou uma conta SSH hoje volte amanhã :)",
+     "limite": "👽 Atingimos o limite de contas por hoje volte amanhã :)"
    }
-  ShellBot.getUpdates --limit 100 --offset $(ShellBot.OffsetNext) --timeout 30
-  for id in $(ShellBot.ListUpdates); do
-    (
-      ShellBot.watchHandle --callback_data ${callback_query_data[$id]}
-      comando=(${message_text[$id]})
-      [[ "${comando[0]}" = "/menu"  || "${comando[0]}" = "/start" ]] && menu
-      [[ "${comando[0]}" = "/id"  ]] && infouser
-    ) &
-  done
-done
+ }
+ EOF
+ pkill -f php; screen -dmS bot_ssh php /root/bot/bot.php
