@@ -28,7 +28,7 @@ $token = (string)$iniParse['token'];
 $limite = (int)$iniParse['limite'];
 
 $mp_access_token = "APP_USR-7527190269570273-090920-8e00f0eee8a23cb2fdd7f7d8db4a4dbf-226024458"; 
-$valor_item = 20.00; 
+$valor_item = 2.00; 
 
 $api_url = "https://api.telegram.org/bot" . $token . "/";
 $offset = 0;
@@ -73,7 +73,7 @@ while (true) {
                     $keyboard = [
                         'inline_keyboard' => [
                             [['text' => '🇧🇷 SSH Gratis BR 🚀', 'callback_data' => '/sshgratis']],
-                            [['text' => '💵 Comprar 30 Dias 🚀', 'callback_data' => '/pix']]
+                            [['text' => '💵 Comprar 30 Diias 🚀', 'callback_data' => '/pix']]
                         ]
                     ];
                     $msg_start = isset($textoMsg['start']) ? $textoMsg['start'] : "🤖 Bem-vindo ao Gerenciador SSH!";
@@ -124,7 +124,7 @@ while (true) {
 
                     $pagamento_dados = [
                         "transaction_amount" => $valor_item,
-                        "description" => "Compra de Acesso SSH 30 Dias",
+                        "description" => "Compra de Acesso SSH 30 Diias",
                         "payment_method_id" => "pix",
                         "payer" => [
                             "email" => "cliente_bot@gmail.com",
