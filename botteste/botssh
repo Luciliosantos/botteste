@@ -11,13 +11,9 @@ $ip = (string)$iniParse['ip'];
 $token = (string)$iniParse['token'];
 $limite = (int)$iniParse['limite'];
 
-// --- SEU ACCESS TOKEN ATUALIZADO DO MERCADO PAGO ---
 $mp_access_token = "APP_USR-7527190269570273-090920-8e00f0eee8a23cb2fdd7f7d8db4a4dbf-226024458"; 
-
-// --- VALOR COBRADO PELO ACESSO (EX: 20.00 PARA VINTE REAIS) ---
 $valor_item = 20.00; 
 
-// ✅ LINK CORRIGIDO DO TELEGRAM
 $api_url = "https://api.telegram.org/bot" . $token . "/";
 $offset = 0;
 
@@ -34,7 +30,7 @@ function enviarMensagemRapida($url, $dados) {
     curl_close($ch);
 }
 
-echo "BOT AUTOMATICO INTEGRADO COM SUCESSO!\n";
+echo "BOT ATUALIZADO!\n";
 
 while (true) {
     $url = $api_url . "getUpdates?offset=" . $offset . "&timeout=1";
@@ -60,15 +56,37 @@ while (true) {
                 if ($text == '/start') {
                     $keyboard = [
                         'inline_keyboard' => [
-                            [['text' => '🇧🇷 SSH Gratis BR 🚀', 'callback_data' => '/sshgratis']],
-                            [['text' => '💵 Comprar 30 Dias 🚀', 'callback_data' => '/pix']]
+                            [
+                                ['text' => '🇧🇷 SSH GRÁTIS', 'callback_data' => '/sshgratis'],
+                                ['text' => '💵 COMPRAR 30 DIAS', 'callback_data' => '/pix']
+                            ],
+                            [
+                                ['text' => '📲 BAIXAR APK', 'url' => 'https://www.terabox.com'],
+                                ['text' => '👤 CRIADOR', 'url' => 'https://t.me/lssilvae']
+                            ],
+                            [
+                                ['text' => '📢 CANAL OFICIAL', 'url' => 'https://t.me/SEU_CANAL'],
+                                ['text' => '💬 SUPORTE', 'url' => 'https://t.me/SEU_SUPORTE']
+                            ],
+                            [
+                                ['text' => '💰 SEJA REVENDEDOR', 'callback_data' => '/revenda'],
+                                ['text' => '📋 MINHA CONTA', 'callback_data' => '/minhaconta']
+                            ]
                         ]
                     ];
-                    $msg_start = isset($textoMsg['start']) ? $textoMsg['start'] : "🤖 Bem-vindo ao Gerenciador SSH!";
+                    
+                    $msg_boas_vindas = "<a href=\"https://t.me/lssilvae\">✨ BEM-VINDO AO SISTEMA ✨</a>\n";
+                    $msg_boas_vindas .= "═══════════════════════════════\n\n";
+                    $msg_boas_vindas .= "<b>Seja muito bem-vindo(a)! 🎉</b>\n\n";
+                    $msg_boas_vindas .= "Aqui você tem acesso a contas de alta velocidade 🚀\n";
+                    $msg_boas_vindas .= "Escolha abaixo o que deseja fazer 👇\n\n";
+                    $msg_boas_vindas .= "═══════════════════════════════";
+                    
                     enviarMensagemRapida($api_url, [
                         'chat_id' => $chat_id,
-                        'text' => $msg_start,
+                        'text' => $msg_boas_vindas,
                         'parse_mode' => 'html',
+                        'disable_web_page_preview' => true,
                         'reply_markup' => json_encode($keyboard)
                     ]);
                 }
@@ -82,7 +100,6 @@ while (true) {
                 $ch_ans = curl_init($api_url . "answerCallbackQuery?callback_query_id=" . $callback_id);
                 curl_setopt($ch_ans, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch_ans, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch_ans, CURLOPT_TIMEOUT, 2);
                 curl_exec($ch_ans);
                 curl_close($ch_ans);
                 
@@ -95,33 +112,41 @@ while (true) {
                     } else {
                         exec('useradd -M -s /bin/false ' . $usuario . ' && echo "' . $usuario . ':' . $senha . '" | chpasswd');
                     }
-                    $textoSSH = "Conta SSH criada ;) \r\n\r\n<b>Servidor:</b> " . $ip . "\r\n<b>Usuário:</b> " . $usuario . "\r\n<b>Senha:</b> " . $senha;
+                    
+                    $textoSSH = "<a href=\"https://t.me/lssilvae\">✅ CONTA CRIADA COM SUCESSO ✅</a>\n";
+                    $textoSSH .= "═══════════════════════════════\n\n";
+                    $textoSSH .= "<b>USUÁRIO:</b> " . $usuario . "\n";
+                    $textoSSH .= "<b>SENHA:</b> " . $senha . "\n\n";
+                    $textoSSH .= "🔒 Servidor protegido\n";
+                    $textoSSH .= "⏳ Validade: 1 dia\n\n";
+                    $textoSSH .= "💡 Não compartilhe seus dados!";
+                    
                     enviarMensagemRapida($api_url, [
                         'chat_id' => $chat_id,
                         'text' => $textoSSH,
-                        'parse_mode' => 'html'
+                        'parse_mode' => 'html',
+                        'disable_web_page_preview' => true
                     ]);
                 }
                 
                 if ($data == '/pix') {
                     enviarMensagemRapida($api_url, [
                         'chat_id' => $chat_id,
-                        'text' => "⏳ <i>Gerando seu PIX Copia e Cola exclusivo... Aguarde.</i>",
+                        'text' => "⏳ <i>GERANDO SEU PIX... AGUARDE.</i>",
                         'parse_mode' => 'html'
                     ]);
 
                     $pagamento_dados = [
                         "transaction_amount" => $valor_item,
-                        "description" => "Compra de Acesso SSH 30 Dias",
+                        "description" => "COMPRA DE ACESSO SSH 30 DIAS",
                         "payment_method_id" => "pix",
                         "payer" => [
                             "email" => "cliente_bot@gmail.com",
-                            "first_name" => "Cliente",
-                            "last_name" => "Telegram"
+                            "first_name" => "CLIENTE",
+                            "last_name" => "TELEGRAM"
                         ]
                     ];
 
-                    // ✅ LINK CORRIGIDO DO MERCADO PAGO
                     $ch_mp = curl_init("https://api.mercadopago.com/v1/payments");
                     curl_setopt($ch_mp, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($ch_mp, CURLOPT_POST, true);
@@ -139,16 +164,21 @@ while (true) {
                     $payment_id = isset($json_mp['id']) ? $json_mp['id'] : null;
 
                     if ($pix_copia_cola && $payment_id) {
-                        $msg_pix = "💵 <b>PIX GERADO COM SUCESSO</b> 💵\n\nCopie o código abaixo e pague no seu aplicativo do banco:\n\n<code>" . $pix_copia_cola . "</code>\n\n⏱️ <b>O sistema está checando seu pagamento automaticamente. Assim que pagar, sua conta será entregue aqui!</b>";
+                        $msg_pix = "<a href=\"https://t.me/lssilvae\">💵 PIX GERADO COM SUCESSO 💵</a>\n";
+                        $msg_pix .= "═══════════════════════════════\n\n";
+                        $msg_pix .= "Copie o código abaixo e pague no app do banco:\n\n";
+                        $msg_pix .= "<code>" . $pix_copia_cola . "</code>\n\n";
+                        $msg_pix .= "⏳ O sistema confirma em instantes...";
+                        
                         enviarMensagemRapida($api_url, [
                             'chat_id' => $chat_id,
                             'text' => $msg_pix,
-                            'parse_mode' => 'html'
+                            'parse_mode' => 'html',
+                            'disable_web_page_preview' => true
                         ]);
 
                         for ($tentativa = 0; $tentativa < 150; $tentativa++) {
                             sleep(2);
-                            // ✅ LINK CORRIGIDO PARA VERIFICAR PAGAMENTO
                             $ch_verificar = curl_init("https://api.mercadopago.com/v1/payments/" . $payment_id);
                             curl_setopt($ch_verificar, CURLOPT_RETURNTRANSFER, true);
                             curl_setopt($ch_verificar, CURLOPT_HTTPHEADER, ["Authorization: Bearer " . $mp_access_token]);
@@ -170,11 +200,18 @@ while (true) {
                                     exec('useradd -M -s /bin/false ' . $usuario . ' && echo "' . $usuario . ':' . $senha . '" | chpasswd');
                                 }
 
-                                $textoAcesso = "✅ <b>PAGAMENTO CONFIRMADO!</b> ✅\n\nSua conta Premium de 30 dias foi criada com sucesso:\n\n<b>Servidor:</b> " . $ip . "\n<b>Usuário:</b> " . $usuario . "\n<b>Senha:</b> " . $senha . "\n\nObrigado pela compra!";
+                                $textoAcesso = "<a href=\"https://t.me/lssilvae\">✅ PAGAMENTO CONFIRMADO! 🎉</a>\n";
+                                $textoAcesso .= "═══════════════════════════════\n\n";
+                                $textoAcesso .= "<b>USUÁRIO:</b> " . $usuario . "\n";
+                                $textoAcesso .= "<b>SENHA:</b> " . $senha . "\n";
+                                $textoAcesso .= "<b>VALIDADE:</b> 30 Dias ✨\n\n";
+                                $textoAcesso .= "Obrigado pela confiança! 🚀";
+                                
                                 enviarMensagemRapida($api_url, [
                                     'chat_id' => $chat_id,
                                     'text' => $textoAcesso,
-                                    'parse_mode' => 'html'
+                                    'parse_mode' => 'html',
+                                    'disable_web_page_preview' => true
                                 ]);
                                 break;
                             }
@@ -182,10 +219,28 @@ while (true) {
                     } else {
                         enviarMensagemRapida($api_url, [
                             'chat_id' => $chat_id,
-                            'text' => "❌ Erro ao gerar PIX. Verifique seu Access Token do Mercado Pago.",
+                            'text' => "❌ ERRO AO GERAR PIX. Verifique o Access Token.",
                             'parse_mode' => 'html'
                         ]);
                     }
+                }
+                
+                if ($data == '/revenda') {
+                    enviarMensagemRapida($api_url, [
+                        'chat_id' => $chat_id,
+                        'text' => "<a href=\"https://t.me/lssilvae\">💰 SEJA REVENDEDOR 💰</a>\n\nQuer ganhar renda extra? Fale comigo:\n\n👉 @lssilvae",
+                        'parse_mode' => 'html',
+                        'disable_web_page_preview' => true
+                    ]);
+                }
+                
+                if ($data == '/minhaconta') {
+                    enviarMensagemRapida($api_url, [
+                        'chat_id' => $chat_id,
+                        'text' => "<a href=\"https://t.me/lssilvae\">📋 MINHA CONTA</a>\n\nEm desenvolvimento! Em breve você consulta tudo aqui.",
+                        'parse_mode' => 'html',
+                        'disable_web_page_preview' => true
+                    ]);
                 }
             }
         }
