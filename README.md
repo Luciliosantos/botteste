@@ -99,5 +99,32 @@ systemctl status bot_ssh.service
 
 
 
+COMANDO PARA IMPEDIR QUE O BOT PARE DE FUNCIONAR 
+
+cat > /etc/systemd/system/bot_ssh.service << 'EOF'
+[Unit]
+Description=Bot Telegram SSH
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+User=root
+WorkingDirectory=/root/bot
+ExecStart=/usr/bin/php /root/bot/botssh
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload && \
+systemctl enable --now bot_ssh.service && \
+systemctl status bot_ssh.service
+
+
+
 
 Telegrama @NETxx0
