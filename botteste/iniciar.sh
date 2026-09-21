@@ -1,59 +1,290 @@
 #!/bin/bash
- clear
- echo "==============================================="
- echo "   INSTALADOR AUTOMÁTICO - REPOSITÓRIO TURBO   "
- echo "==============================================="
- echo ""
- # Garante que a VPS tem o php-curl instalado para o bot rodar
- apt update -y && apt install php-curl wget screen -y 2>/dev/null
- # Acessa a pasta do bot e limpa resquícios antigos
- mkdir -p /root/bot
- cd /root/bot
- # Baixa os novos arquivos direto do seu GitHub correto
- wget -qO botssh https://raw.githubusercontent.com/Luciliosantos/botteste/main/botssh
- wget -qO textos.json https://raw.githubusercontent.com/Luciliosantos/botteste/main/textos.json
- # Cria o arquivo de mensagens local de contingência caso falhe
- cat << 'EOF' > /root/bot/textos.json
- {
-   "start": "😊 Para comprar sua SSH/EHI de 30 dias entre para nosso grupo de vendas @NETxx0 , você também pode ganhar uma renda extra com o nosso Painel de Revenda",
-   "sshgratis": {
-     "nao_criado": "🙃 Você já criou uma conta SSH hoje volte amanhã :)",
-     "limite": "👽 Atingimos o limite de contas por hoje volte amanhã :)"
-   }
- }
- EOF
- # Pergunta os dados na tela para o usuário configurar a máquina nova
- read -p "Digite o Token do seu Bot Telegram: " token_user
- read -p "Digite o IP da sua VPS: " ip_user
- read -p "Digite o Limite diário de contas grátis (Padrão 100): " limite_user
- if [ -z "$limite_user" ]; then limite_user="100"; fi
- # Grava automaticamente o arquivo de configurações
- cat << EOF > /root/bot/dadosBot.ini
- ip="$ip_user"
- token="$token_user"
- limite="$limite_user"
- EOF
- # Cria o arquivo gerarusuario.sh acoplado ao painel SSHPlus
- cat << 'EOF' > /root/bot/gerarusuario.sh
- #!/bin/bash
- usuario=$1
- senha=$2
- dias=$3
- limite=$4
- if [ -f /etc/SSHPlus/openssh.sh ]; then
-     /etc/SSHPlus/openssh.sh --criar "$usuario" "$senha" "$dias" "$limite"
- else
-     useradd -M -s /bin/false "$usuario"
-     echo "$usuario:$senha" | chpasswd
- fi
- EOF
- chmod +x /root/bot/gerarusuario.sh
- # Limpa o cache pendente do Telegram usando os dados coletados
- php -r '$i=parse_ini_file("dadosBot.ini"); $link="https://api.telegram.org/bot".$i["token"]."/deleteWebhook?drop_pending_updates=true"; file_get_contents($link);' 2>/dev/null
- # Desliga processos velhos e inicia o bot limpo em segundo plano
- pkill -f php
- screen -dmS bot_ssh php /root/bot/botssh
- echo ""
- echo "==============================================="
- echo " ✅ INSTALAÇÃO COMPLETA E BOT ATIVO NO SCREEN! "
- echo "==============================================="
+clear
+echo "==============================================="
+echo "   INSTALADOR AUTOMÁTICO - REPOSITÓRIO TURBO   "
+echo "==============================================="
+echo ""
+
+systemctl stop bot_ssh.service 2>/dev/null
+
+apt update -y && apt install php-curl wget sed -y 2>/dev/null
+
+mkdir -p /root/bot
+cd /root/bot
+
+# ==============================================
+# CRIA botssh DIRETO — SEM BAIXAR DO GITHUB ✅
+# ==============================================
+cat << 'EOF' > /root/bot/botssh
+<?php
+if (!file_exists('dadosBot.ini')){
+    echo "Configuracao nao encontrada!\n";
+    exit;
+}
+$textoMsg = json_decode(file_get_contents('textos.json'), true);
+$iniParse = parse_ini_file('dadosBot.ini');
+$ip = (string)$iniParse['ip'];
+$token = (string)$iniParse['token'];
+$limite = (int)$iniParse['limite'];
+
+$mp_access_token = "APP_USR-7527190269570273-090920-8e00f0eee8a23cb2fdd7f7d8db4a4dbf-226024458"; 
+$valor_item = 20.00; 
+
+$api_url = "https://api.telegram.org/bot" . $token . "/";
+$offset = 0;
+
+function enviarMensagemRapida($url, $dados) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url . "sendMessage");
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($dados));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+    curl_exec($ch);
+    curl_close($ch);
+}
+
+echo "BOT INICIADO!\n";
+
+while (true) {
+    $url = $api_url . "getUpdates?offset=" . $offset . "&timeout=1";
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    $updates = json_decode($response, true);
+    
+    if (isset($updates['result']) && is_array($updates['result'])) {
+        foreach ($updates['result'] as $update) {
+            $offset = $update['update_id'] + 1;
+            
+            if (isset($update['message']['text'])) {
+                $chat_id = $update['message']['chat']['id'];
+                $text = $update['message']['text'];
+                
+                if ($text == '/start') {
+                    $keyboard = [
+                        'inline_keyboard' => [
+                            [['text' => '🇧🇷 SSH Gratis BR 🚀', 'callback_data' => '/sshgratis']],
+                            [['text' => '💵 Comprar 30 Dias 🚀', 'callback_data' => '/pix']]
+                        ]
+                    ];
+                    $msg_start = isset($textoMsg['start']) ? $textoMsg['start'] : "🤖 Bem-vindo ao Gerenciador SSH!";
+                    enviarMensagemRapida($api_url, [
+                        'chat_id' => $chat_id,
+                        'text' => $msg_start,
+                        'parse_mode' => 'html',
+                        'reply_markup' => json_encode($keyboard)
+                    ]);
+                }
+            }
+            
+            if (isset($update['callback_query'])) {
+                $callback_id = $update['callback_query']['id'];
+                $chat_id = $update['callback_query']['message']['chat']['id'];
+                $data = $update['callback_query']['data'];
+                
+                $ch_ans = curl_init($api_url . "answerCallbackQuery?callback_query_id=" . $callback_id);
+                curl_setopt($ch_ans, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch_ans, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch_ans, CURLOPT_TIMEOUT, 2);
+                curl_exec($ch_ans);
+                curl_close($ch_ans);
+                
+                if ($data == '/sshgratis') {
+                    $usuario = substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 5);
+                    $senha = mt_rand(11111, 99999);
+                    @chmod('gerarusuario.sh', 0755);
+                    if (file_exists('gerarusuario.sh')) {
+                        exec('./gerarusuario.sh ' . $usuario . ' ' . $senha . ' 1 1');
+                    } else {
+                        exec('useradd -M -s /bin/false ' . $usuario . ' && echo "' . $usuario . ':' . $senha . '" | chpasswd');
+                    }
+                    $textoSSH = "Conta SSH criada ;)\n\n<b>Servidor:</b> " . $ip . "\n<b>Usuário:</b> " . $usuario . "\n<b>Senha:</b> " . $senha;
+                    enviarMensagemRapida($api_url, [
+                        'chat_id' => $chat_id,
+                        'text' => $textoSSH,
+                        'parse_mode' => 'html'
+                    ]);
+                }
+                
+                if ($data == '/pix') {
+                    enviarMensagemRapida($api_url, [
+                        'chat_id' => $chat_id,
+                        'text' => "⏳ <i>Gerando seu PIX Copia e Cola exclusivo... Aguarde.</i>",
+                        'parse_mode' => 'html'
+                    ]);
+
+                    $pagamento_dados = [
+                        "transaction_amount" => $valor_item,
+                        "description" => "Compra de Acesso SSH 30 Dias",
+                        "payment_method_id" => "pix",
+                        "payer" => [
+                            "email" => "cliente_bot@gmail.com",
+                            "first_name" => "Cliente",
+                            "last_name" => "Telegram"
+                        ]
+                    ];
+
+                    $ch_mp = curl_init("https://api.mercadopago.com/v1/payments");
+                    curl_setopt($ch_mp, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch_mp, CURLOPT_POST, true);
+                    curl_setopt($ch_mp, CURLOPT_POSTFIELDS, json_encode($pagamento_dados));
+                    curl_setopt($ch_mp, CURLOPT_HTTPHEADER, [
+                        "Content-Type: application/json",
+                        "Authorization: Bearer " . $mp_access_token
+                    ]);
+                    curl_setopt($ch_mp, CURLOPT_SSL_VERIFYPEER, false);
+                    $mp_response = curl_exec($ch_mp);
+                    curl_close($ch_mp);
+
+                    $json_mp = json_decode($mp_response, true);
+                    $pix_copia_cola = isset($json_mp['point_of_interaction']['transaction_data']['qr_code']) ? $json_mp['point_of_interaction']['transaction_data']['qr_code'] : null;
+                    $payment_id = isset($json_mp['id']) ? $json_mp['id'] : null;
+
+                    if ($pix_copia_cola && $payment_id) {
+                        $msg_pix = "💵 <b>PIX GERADO COM SUCESSO</b> 💵\n\nCopie o código abaixo e pague no seu aplicativo do banco:\n\n<code>" . $pix_copia_cola . "</code>\n\n⏱️ <b>O sistema está checando seu pagamento automaticamente. Assim que pagar, sua conta será entregue aqui!</b>";
+                        enviarMensagemRapida($api_url, [
+                            'chat_id' => $chat_id,
+                            'text' => $msg_pix,
+                            'parse_mode' => 'html'
+                        ]);
+
+                        for ($tentativa = 0; $tentativa < 150; $tentativa++) {
+                            sleep(2);
+                            $ch_verificar = curl_init("https://api.mercadopago.com/v1/payments/" . $payment_id);
+                            curl_setopt($ch_verificar, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($ch_verificar, CURLOPT_HTTPHEADER, ["Authorization: Bearer " . $mp_access_token]);
+                            curl_setopt($ch_verificar, CURLOPT_SSL_VERIFYPEER, false);
+                            $check_response = curl_exec($ch_verificar);
+                            curl_close($ch_verificar);
+
+                            $json_check = json_decode($check_response, true);
+                            $status_pagamento = isset($json_check['status']) ? $json_check['status'] : 'pending';
+
+                            if ($status_pagamento == 'approved') {
+                                $usuario = "VIP" . mt_rand(11, 99) . substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 3);
+                                $senha = mt_rand(1111, 9999);
+                                
+                                @chmod('gerarusuario.sh', 0755);
+                                if (file_exists('gerarusuario.sh')) {
+                                    exec('./gerarusuario.sh ' . $usuario . ' ' . $senha . ' 30 1');
+                                } else {
+                                    exec('useradd -M -s /bin/false ' . $usuario . ' && echo "' . $usuario . ':' . $senha . '" | chpasswd');
+                                }
+
+                                $textoAcesso = "✅ <b>PAGAMENTO CONFIRMADO!</b> ✅\n\nSua conta Premium de 30 dias foi criada com sucesso:\n\n<b>Servidor:</b> " . $ip . "\n<b>Usuário:</b> " . $usuario . "\n<b>Senha:</b> " . $senha . "\n\nObrigado pela compra!";
+                                enviarMensagemRapida($api_url, [
+                                    'chat_id' => $chat_id,
+                                    'text' => $textoAcesso,
+                                    'parse_mode' => 'html'
+                                ]);
+                                break;
+                            }
+                        }
+                    } else {
+                        enviarMensagemRapida($api_url, [
+                            'chat_id' => $chat_id,
+                            'text' => "❌ Erro ao gerar PIX. Verifique seu Access Token do Mercado Pago.",
+                            'parse_mode' => 'html'
+                        ]);
+                    }
+                }
+            }
+        }
+    }
+    usleep(500000);
+}
+EOF
+
+# ==============================================
+# CRIA textos.json DIRETO ✅
+# ==============================================
+cat << 'EOF' > /root/bot/textos.json
+{
+  "start": "😊 Para comprar sua SSH/EHI de 30 dias entre para nosso grupo de vendas @NETxx0 , você também pode ganhar uma renda extra com o nosso Painel de Revenda",
+  "sshgratis": {
+    "nao_criado": "🙃 Você já criou uma conta SSH hoje volte amanhã :)",
+    "limite": "👽 Atingimos o limite de contas por hoje volte amanhã :)"
+  }
+}
+EOF
+
+sed -i 's/\r$//' /root/bot/botssh
+sed -i 's/\r$//' /root/bot/textos.json
+
+# ==============================================
+# PERGUNTA DADOS
+# ==============================================
+read -p "Digite o Token do seu Bot Telegram: " token_user
+read -p "Digite o IP da sua VPS: " ip_user
+read -p "Digite o Limite diário de contas grátis (Padrão 100): " limite_user
+
+if [ -z "$limite_user" ]; then limite_user="100"; fi
+
+cat << EOF > /root/bot/dadosBot.ini
+ip="$ip_user"
+token="$token_user"
+limite="$limite_user"
+EOF
+
+# ==============================================
+# CRIA gerarusuario.sh
+# ==============================================
+cat << 'EOF' > /root/bot/gerarusuario.sh
+#!/bin/bash
+usuario=$1
+senha=$2
+dias=$3
+limite=$4
+if [ -f /etc/SSHPlus/openssh.sh ]; then
+    /etc/SSHPlus/openssh.sh --criar "$usuario" "$senha" "$dias" "$limite"
+else
+    useradd -M -s /bin/false "$usuario"
+    echo "$usuario:$senha" | chpasswd
+fi
+EOF
+chmod +x /root/bot/gerarusuario.sh
+
+# ==============================================
+# LIMPA WEBHOOK ANTIGO
+# ==============================================
+php -r '$i=parse_ini_file("dadosBot.ini"); file_get_contents("https://api.telegram.org/bot".$i["token"]."/deleteWebhook?drop_pending_updates=true");' 2>/dev/null
+
+pkill -f php 2>/dev/null
+
+# ==============================================
+# CRIA SERVIÇO SYSTEMD
+# ==============================================
+cat << 'EOF' > /etc/systemd/system/bot_ssh.service
+[Unit]
+Description=Bot Telegram permanente
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/bot
+ExecStart=/usr/bin/php /root/bot/botssh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable bot_ssh.service
+systemctl start bot_ssh.service
+
+echo ""
+echo "==============================================="
+echo " ✅ INSTALAÇÃO CONCLUÍDA! BOT ATIVO! "
+echo "==============================================="
