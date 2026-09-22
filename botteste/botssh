@@ -1,20 +1,26 @@
 <?php
+error_reporting(0);
+ini_set('display_errors', 0);
+set_time_limit(0);
+
 if (!file_exists('dadosBot.ini')){
-    echo "ERRO: dadosBot.ini nao encontrado!\n";
+    echo "❌ ERRO: dadosBot.ini NAO ENCONTRADO!\n";
     exit;
 }
 
-$ini = parse_ini_file('dadosBot.ini');
+$ini = parse_ini_file('dadosBot.ini', true);
 $token = trim($ini['token'] ?? '');
 $mp_token = trim($ini['mp_token'] ?? '');
-if (!$token || !$mp_token) { echo "ERRO: Token vazio!\n"; exit; }
+
+if (!$token) { echo "❌ ERRO: Token vazio!\n"; exit; }
+if (!$mp_token) { echo "❌ ERRO: mp_token vazio!\n"; exit; }
 
 $api = "https://api.telegram.org/bot$token/";
 $api_mp = "https://api.mercadopago.com/v1/payments/";
 $admin = 7761133138;
 $offset = 0;
 $sessao = [];
-$pagamentos = []; // Monitora PIX pendente
+$pagamentos = [];
 
 $recargas = [
     'vivo'  => ['nome'=>'📱 VIVO',   'valores'=>[15,25,35,50,100]],
@@ -31,8 +37,8 @@ function enviar($d){
         CURLOPT_POSTFIELDS => http_build_query($d),
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 3,
-        CURLOPT_TIMEOUT => 5
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 10
     ]);
     curl_exec($ch); curl_close($ch);
 }
@@ -45,8 +51,8 @@ function editar_msg($d){
         CURLOPT_POSTFIELDS => http_build_query($d),
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 3,
-        CURLOPT_TIMEOUT => 5
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 10
     ]);
     curl_exec($ch); curl_close($ch);
 }
@@ -66,7 +72,8 @@ function gerar_pix_mp($valor, $descricao){
         CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer $mp_token"],
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_TIMEOUT => 10
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 15
     ]);
     $resp = curl_exec($ch); curl_close($ch);
     return json_decode($resp, true);
@@ -79,57 +86,64 @@ function verificar_pagamento($id_pag){
         CURLOPT_HTTPHEADER => ["Authorization: Bearer $mp_token"],
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_TIMEOUT => 5
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 10
     ]);
     $resp = curl_exec($ch); curl_close($ch);
+    if(!$resp) return false;
     $d = json_decode($resp, true);
     return ($d['status'] ?? '') === 'approved';
 }
 
-echo "✅ BOT — PIX AUTOMÁTICO / RECARGA MANUAL\n";
+echo "✅ BOT INICIADO — PIX AUTOMÁTICO\n";
 
 while(true){
-    // === MONITORA PAGAMENTOS PENDENTES ===
+    // === MONITORA PAGAMENTOS — A CADA 10s ===
     foreach($pagamentos as $id_pag => $pedido){
         if(verificar_pagamento($id_pag)){
             $cid = $pedido['cid'];
             $op = $pedido['op'];
             $valor = $pedido['valor'];
             $numero = $pedido['numero'];
-            $nome_op = $GLOBALS['recargas'][$op]['nome'];
+            $nome_op = $recargas[$op]['nome'];
 
-            // ✅ AVISA CLIENTE
             enviar([
                 'chat_id' => $cid,
-                'text' => "✅ <b>PAGAMENTO CONFIRMADO!</b>\n\nRecebemos seu pagamento! 🎉\nEstamos processando sua recarga... ⏳\nEm instantes você receberá no número:\n<code>$numero</code>\n\nObrigado! 💜",
+                'text' => "✅ <b>PAGAMENTO CONFIRMADO!</b>\n\nRecebemos seu pagamento! 🎉\nProcessando recarga... ⏳\nNúmero: <code>$numero</code>\n\nObrigado! 💜",
                 'parse_mode' => 'html'
             ]);
 
-            // ✅ TE ENVIA TUDO PRA FAZER MANUAL
             if($admin){
                 enviar([
                     'chat_id' => $admin,
-                    'text' => "🔔 ✅ PAGAMENTO CONFIRMADO — FAZER RECARGA\n\n═══════════════════\n📋 DADOS DO PEDIDO:\n\n🔹 Operadora: <b>$nome_op</b>\n🔹 Valor: R$ ".number_format($valor,2,',','')."\n🔹 Número do Cliente: <code>$numero</code>\n🔹 Cliente ID: <code>$cid</code>\n═══════════════════\n\n👉 FAZER A RECARGA AGORA! 💳",
+                    'text' => "🔔 ✅ PAGAMENTO CONFIRMADO — FAZER RECARGA\n\n📋 DADOS:\n🔹 Operadora: <b>$nome_op</b>\n🔹 Valor: R$ ".number_format($valor,2,',','')."\n🔹 Número: <code>$numero</code>\n🔹 Cliente ID: <code>$cid</code>\n\n👉 FAZER A RECARGA AGORA! 💳",
                     'parse_mode' => 'html'
                 ]);
             }
-
             unset($pagamentos[$id_pag]);
         }
     }
 
-    // === RECEBE MENSAGENS E COMANDOS ===
-    $ch = curl_init($api."getUpdates?offset=$offset&timeout=1");
+    // === RECEBE MENSAGENS ===
+    $ch = curl_init($api."getUpdates?offset=$offset&timeout=5");
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 2,
-        CURLOPT_TIMEOUT => 3
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 10
     ]);
     $resp = curl_exec($ch); curl_close($ch);
     
+    if(!$resp){
+        usleep(100000); // 0,1s
+        continue;
+    }
+    
     $dados = json_decode($resp, true);
-    if(!isset($dados['result'])){ usleep(300000); continue; }
+    if(!isset($dados['result']) || !is_array($dados['result'])){
+        usleep(100000);
+        continue;
+    }
     
     foreach($dados['result'] as $u){
         $offset = $u['update_id'] + 1;
@@ -223,7 +237,6 @@ while(true){
             $op = $sessao[$cid]['op'];
             $valor = $sessao[$cid]['valor'];
             
-            // Gera PIX
             $mp = gerar_pix_mp($valor, "Recarga {$recargas[$op]['nome']} - $numero");
             $id_pag = $mp['id'] ?? '';
             $pix_copia = $mp['point_of_interaction']['transaction_data']['qr_code'] ?? '';
@@ -233,7 +246,6 @@ while(true){
                 continue;
             }
             
-            // Guarda pra monitorar
             $pagamentos[$id_pag] = [
                 'cid' => $cid,
                 'op' => $op,
@@ -241,10 +253,9 @@ while(true){
                 'numero' => $numero
             ];
             
-            // Mostra PIX — SEM BOTÃO DE CONFIRMAR
             enviar([
                 'chat_id' => $cid,
-                'text' => "💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Operadora: {$recargas[$op]['nome']}\n💰 Valor: <b>R$ ".number_format($valor,2,',','')."</b>\n📱 Número: <code>$numero</code>\n\n📋 <b>COPIA E COLA:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, o sistema confirma automaticamente!\nNão precisa avisar, é só esperar ✅",
+                'text' => "💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Operadora: {$recargas[$op]['nome']}\n💰 Valor: <b>R$ ".number_format($valor,2,',','')."</b>\n📱 Número: <code>$numero</code>\n\n📋 <b>COPIA E COLA:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, confirma automaticamente!\nNão precisa avisar ✅",
                 'parse_mode' => 'html'
             ]);
             
@@ -306,5 +317,5 @@ while(true){
             continue;
         }
     }
-    usleep(300000); // Verifica PIX a cada 30s
+    usleep(100000); // 0,1s — responde rápido
 }
