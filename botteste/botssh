@@ -154,7 +154,7 @@ while(true){
             $valor = $sessao[$cid]['valor'];
             $numero = $sessao[$cid]['numero'];
             
-            if($admin && $admin !== $cid){
+            if($admin){
                 enviar(['chat_id'=>$admin,'text'=>"🔔 NOVA RECARGA\n\nOperadora: {$recargas[$op]['nome']}\nNúmero: <code>$numero</code>\nValor: R$ ".number_format($valor,2,',','')."\nCliente: <code>$cid</code>",'parse_mode'=>'html']);
             }
             enviar(['chat_id'=>$cid,'text'=>'✅ <b>PEDIDO RECEBIDO!</b>\nProcessando via RecargaPay 💳','parse_mode'=>'html']);
