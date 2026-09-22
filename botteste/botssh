@@ -1,7 +1,7 @@
 <?php
 error_reporting(0);
 ini_set('display_errors', 0);
-set_time_limit(30); // Reduzido para não travar
+set_time_limit(30);
 
 // === CARREGA CONFIGURAÇÃO ===
 if (!file_exists('dadosBot.ini')){
@@ -62,6 +62,11 @@ function editar_msg($d){
     curl_setopt_array($ch, [CURLOPT_POST=>1, CURLOPT_POSTFIELDS=>http_build_query($d),
         CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
     curl_exec($ch); curl_close($ch);
+}
+
+function responder_clique($callback_id, $texto = "Processando..."){
+    global $api;
+    @file_get_contents($api."answerCallbackQuery?callback_query_id=$callback_id&text=".urlencode($texto));
 }
 
 function gerar_pix_mp($valor, $descricao){
@@ -142,12 +147,12 @@ while(true){
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>8]);
     $resp = curl_exec($ch); curl_close($ch);
     if(!$resp || !($dados = json_decode($resp, true)) || !isset($dados['result'])){
-        usleep(50000); continue; // Mais rápido: 0.05s em vez de 0.1s
+        usleep(50000); continue;
     }
     
     foreach($dados['result'] as $u){
         $offset = $u['update_id'] + 1;
-        $cid = $txt = $cb = $mid = '';
+        $cid = $txt = $cb = $mid = $callback_id = '';
         
         if(isset($u['message'])){
             $cid = $u['message']['chat']['id'];
@@ -158,13 +163,13 @@ while(true){
             $cb = $u['callback_query']['data'];
             $cid = $u['callback_query']['message']['chat']['id'];
             $mid = $u['callback_query']['message']['message_id'];
-            // ✅ Responde IMEDIATAMENTE ao clique
-            @file_get_contents($api."answerCallbackQuery?callback_query_id=".$u['callback_query']['id']."&text=Processando...");
+            $callback_id = $u['callback_query']['id'];
         }
         if(!$cid) continue;
 
         // === MENU PRINCIPAL ===
         if($txt === '/start' || $cb === 'voltar_inicio'){
+            if($callback_id) responder_clique($callback_id);
             $kb = [
                 'inline_keyboard' => [
                     [['text'=>'🎁 TESTE GRÁTIS','callback_data'=>'/teste']],
@@ -184,6 +189,7 @@ while(true){
 
         // === TESTE GRÁTIS ===
         if($cb === '/teste'){
+            responder_clique($callback_id, "Gerando seu teste...");
             if(!pode_pedir_teste($cid)){
                 editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"⛔ <b>Limite Atingido!</b>\n\nVocê já pediu um teste grátis hoje.\nTente novamente amanhã! ✅",'parse_mode'=>'html']);
                 continue;
@@ -196,6 +202,7 @@ while(true){
 
         // === MENU COMPRAR SSH ===
         if($cb === 'comprar_ssh'){
+            responder_clique($callback_id, "Abrindo planos...");
             $kb = ['inline_keyboard' => []];
             foreach($planos_ssh as $chave => $pl){
                 $kb['inline_keyboard'][] = [['text'=>$pl['nome'],'callback_data'=>"plano_$chave"]];
@@ -205,43 +212,56 @@ while(true){
             continue;
         }
 
-        // === GERAR PIX DO PLANO — OTIMIZADO ===
+        // === GERAR PIX DO PLANO — CORRIGIDO ===
         if(substr($cb, 0, 7) === 'plano_'){
             $chave = (int)substr($cb, 7);
             if(!isset($planos_ssh[$chave])) {
-                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
-                    'text'=>'❌ Plano inválido!','parse_mode'=>'html']);
+                responder_clique($callback_id, "Plano inválido!");
+                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'❌ Plano inválido!','parse_mode'=>'html']);
                 continue;
             }
             $pl = $planos_ssh[$chave];
             
-            // ✅ AVISA NA HORA — não deixa o usuário esperando sem resposta
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
-                'text'=>"⏳ Gerando PIX — Plano de {$pl['dias']} dias...",
-                'parse_mode'=>'html']);
+            // ✅ RESPONDE O CLIQUE NA HORA — ISSO DESBLOQUEIA!
+            responder_clique($callback_id, "Gerando PIX...");
             
-            // Agora gera o PIX
+            // ✅ Mostra carregando IMEDIATAMENTE
+            editar_msg([
+                'chat_id' => $cid,
+                'message_id' => $mid,
+                'text' => "⏳ Gerando PIX — Plano de {$pl['dias']} dias...\nAguarde um instante ⏱️",
+                'parse_mode' => 'html'
+            ]);
+            
+            // ✅ Agora gera o PIX
             $mp = gerar_pix_mp($pl['valor'], "SSH {$pl['dias']} Dias — TecNet 5G");
             $id_pag = $mp['id'] ?? '';
             $pix_copia = $mp['point_of_interaction']['transaction_data']['qr_code'] ?? '';
             
             if(!$id_pag || !$pix_copia){
-                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
-                    'text'=>'❌ Erro ao gerar PIX. Tente novamente.',
-                    'parse_mode'=>'html']);
+                editar_msg([
+                    'chat_id' => $cid,
+                    'message_id' => $mid,
+                    'text' => '❌ Erro ao gerar PIX. Tente novamente.',
+                    'parse_mode' => 'html'
+                ]);
                 continue;
             }
             
             $pagamentos[$id_pag] = ['cid'=>$cid,'tipo'=>'ssh','dias'=>$pl['dias']];
             
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
-                'text'=>"💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Plano: <b>{$pl['dias']} Dias</b>\n💰 Valor: <b>R$ ".number_format($pl['valor'],2,',','')."</b>\n\n📋 <b>Copia e cola:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, sua conta será enviada automaticamente! ✅",
-                'parse_mode'=>'html']);
+            editar_msg([
+                'chat_id' => $cid,
+                'message_id' => $mid,
+                'text' => "💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Plano: <b>{$pl['dias']} Dias</b>\n💰 Valor: <b>R$ ".number_format($pl['valor'],2,',','')."</b>\n\n📋 <b>Copia e cola:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, sua conta será enviada automaticamente! ✅",
+                'parse_mode' => 'html'
+            ]);
             continue;
         }
 
         // === RECARGA CELULAR ===
         if($cb === 'recarga_lista'){
+            responder_clique($callback_id);
             $kb = ['inline_keyboard' => []];
             foreach($recargas as $chave => $dados_op)
                 $kb['inline_keyboard'][] = [['text'=>$dados_op['nome'],'callback_data'=>"op_$chave"]];
@@ -250,6 +270,7 @@ while(true){
             continue;
         }
         if(substr($cb, 0, 3) === 'op_'){
+            responder_clique($callback_id);
             $op = substr($cb, 3);
             if(!isset($recargas[$op])) continue;
             $sessao[$cid]['op'] = $op;
@@ -261,6 +282,7 @@ while(true){
             continue;
         }
         if(substr($cb, 0, 4) === 'val_'){
+            responder_clique($callback_id);
             $partes = explode('_', $cb);
             if(count($partes) < 3) continue;
             list(,$op,$valor) = $partes;
@@ -289,13 +311,15 @@ while(true){
             continue;
         }
         if($cb === '/revenda'){
+            responder_clique($callback_id);
             editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'💰 <b>SEJA REVENDEDOR!</b>\nFale com @lssilvae','parse_mode'=>'html']);
             continue;
         }
         if($cb === '/minhaconta'){
+            responder_clique($callback_id);
             editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'📋 <b>MINHA CONTA</b>\nEm breve!','parse_mode'=>'html']);
             continue;
         }
     }
-    usleep(50000); // Verifica 2x mais rápido!
+    usleep(50000);
 }
