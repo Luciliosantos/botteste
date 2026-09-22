@@ -3,6 +3,7 @@ error_reporting(0);
 ini_set('display_errors', 0);
 set_time_limit(0);
 
+// === CARREGA CONFIGURAÇÃO ===
 if (!file_exists('dadosBot.ini')){
     echo "❌ ERRO: dadosBot.ini NAO ENCONTRADO!\n";
     exit;
@@ -28,6 +29,16 @@ $recargas = [
     'tim'   => ['nome'=>'📱 TIM',    'valores'=>[15,25,40,60,90]],
     'oi'    => ['nome'=>'📱 OI',     'valores'=>[10,20,35,50]]
 ];
+
+// === LIMPA WEBHOOK AUTOMATICAMENTE ===
+$ch = curl_init($api."deleteWebhook");
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => 1,
+    CURLOPT_SSL_VERIFYPEER => 0,
+    CURLOPT_TIMEOUT => 10
+]);
+curl_exec($ch); curl_close($ch);
+echo "✅ Webhook limpo!\n";
 
 function enviar($d){
     global $api;
@@ -98,7 +109,7 @@ function verificar_pagamento($id_pag){
 echo "✅ BOT INICIADO — PIX AUTOMÁTICO\n";
 
 while(true){
-    // === MONITORA PAGAMENTOS — A CADA 10s ===
+    // === MONITORA PAGAMENTOS ===
     foreach($pagamentos as $id_pag => $pedido){
         if(verificar_pagamento($id_pag)){
             $cid = $pedido['cid'];
@@ -135,7 +146,7 @@ while(true){
     $resp = curl_exec($ch); curl_close($ch);
     
     if(!$resp){
-        usleep(100000); // 0,1s
+        usleep(100000);
         continue;
     }
     
@@ -317,5 +328,5 @@ while(true){
             continue;
         }
     }
-    usleep(100000); // 0,1s — responde rápido
+    usleep(100000);
 }
