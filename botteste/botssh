@@ -266,7 +266,7 @@ while(true){
             
             enviar([
                 'chat_id' => $cid,
-                'text' => "💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Operadora: {$recargas[$op]['nome']}\n💰 Valor: <b>R$ ".number_format($valor,2,',','')."</b>\n📱 Número: <code>$numero</code>\n\n📋 <b>COPIA E COLA:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, confirma automaticamente!\nNão precisa avisar ✅",
+                'text' => "💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Operadora: {$recargas[$op]['nome']}\n💰 Valor: <b>R$ ".number_format($valor,2,',','')."</b>\n📱 Número: <code>$numero</code>\n\n📋 <b>COPIA E COLA:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, A Recarga Pode Demorar Até 8 Horas Para Ser Processada!",
                 'parse_mode' => 'html'
             ]);
             
