@@ -1,11 +1,12 @@
 <?php
-error_reporting(0);
-ini_set('display_errors', 0);
-set_time_limit(30);
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+set_time_limit(60);
+ini_set('default_socket_timeout', 30);
 
 // === CONFIGURAÇÃO ===
 if (!file_exists('dadosBot.ini')){
-    echo "❌ ERRO: dadosBot.ini NAO ENCONTRADO!\n";
+    echo "❌ ERRO: dadosBot.ini NÃO ENCONTRADO!\n";
     exit;
 }
 
@@ -13,16 +14,13 @@ $ini = parse_ini_file('dadosBot.ini', true);
 $token = trim($ini['token'] ?? '');
 $mp_token = trim($ini['mp_token'] ?? '');
 
-if (!$token || !$mp_token) {
-    echo "❌ Token vazio!\n";
-    exit;
-}
+if (!$token)  { echo "❌ Token vazio!\n"; exit; }
+if (!$mp_token) { echo "❌ mp_token vazio!\n"; exit; }
 
 $api = "https://api.telegram.org/bot$token/";
 $api_mp = "https://api.mercadopago.com/v1/payments/";
 $admin = 7761133138;
 $offset = 0;
-$sessao = [];
 $pagamentos = [];
 $teste_gratis = [];
 
@@ -35,112 +33,107 @@ $planos_ssh = [
     30 => ['dias' => 30, 'valor' => 20.00, 'nome' => '🔵 30 Dias — R$ 20,00']
 ];
 
-$recargas = [
-    'vivo'  => ['nome'=>'📱 VIVO',   'valores'=>[15,25,35,50,100]],
-    'claro' => ['nome'=>'📱 CLARO',  'valores'=>[10,20,30,50,80]],
-    'tim'   => ['nome'=>'📱 TIM',    'valores'=>[15,25,40,60,90]],
-    'oi'    => ['nome'=>'📱 OI',     'valores'=>[10,20,35,50]]
-];
-
-// === FUNÇÕES SIMPLES ===
-function curl_post($url, $dados){
+// === FUNÇÃO CURL GARANTIDA ===
+function requisitar($url, $post = null, $headers = []){
     $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => 1,
-        CURLOPT_POSTFIELDS => $dados,
+    $opts = [
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_TIMEOUT => 15
-    ]);
-    $r = curl_exec($ch);
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_VERBOSE => 0
+    ];
+    if ($post !== null) {
+        $opts[CURLOPT_POST] = 1;
+        $opts[CURLOPT_POSTFIELDS] = $post;
+        if ($headers) $opts[CURLOPT_HTTPHEADER] = $headers;
+    }
+    curl_setopt_array($ch, $opts);
+    $resp = curl_exec($ch);
+    $err = curl_error($ch);
     curl_close($ch);
-    return $r;
+    if ($err) echo "⚠️ CURL: $err\n";
+    return $resp;
 }
 
-function curl_get($url){
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => 1,
-        CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_TIMEOUT => 15
-    ]);
-    $r = curl_exec($ch);
-    curl_close($ch);
-    return $r;
-}
-
-function responde_clique($cid, $mid, $callback_id, $texto){
+// === CONFIRMA CLIQUE — OBRIGATÓRIO ===
+function confirmar_clique($cid, $cbid, $texto = "Processando..."){
     global $api;
-    // Confirma o clique PRO Telegram
-    curl_get($api."answerCallbackQuery?callback_query_id=".urlencode($callback_id)."&text=OK");
+    if (!$cbid) return false;
+    $url = $api."answerCallbackQuery?callback_query_id=".urlencode($cbid)."&text=".urlencode($texto);
+    $r = requisitar($url);
+    echo "✅ CLIQUE CONFIRMADO: $cid → $texto\n";
+    return true;
 }
 
-function gera_pix($valor, $desc, $token_mp){
-    $dados = json_encode([
+function enviar_msg($dados){
+    global $api;
+    $r = requisitar($api."sendMessage", http_build_query($dados));
+    echo "📤 Mensagem enviada: ".$dados['chat_id']."\n";
+    return $r;
+}
+
+function gerar_pix_mp($valor, $desc){
+    global $mp_token;
+    $json = json_encode([
         "transaction_amount" => $valor,
         "description" => $desc,
         "payment_method_id" => "pix",
-        "payer" => ["email"=>"pagamento@bot.com","first_name"=>"Cliente","last_name"=>"Telegram"]
+        "payer" => ["email"=>"cliente@bot.com","first_name"=>"Cliente","last_name"=>"Telegram"]
     ]);
-    $ch = curl_init("https://api.mercadopago.com/v1/payments");
-    curl_setopt_array($ch, [
-        CURLOPT_POST => 1,
-        CURLOPT_POSTFIELDS => $dados,
-        CURLOPT_HTTPHEADER => [
-            "Content-Type: application/json",
-            "Authorization: Bearer $token_mp"
-        ],
-        CURLOPT_RETURNTRANSFER => 1,
-        CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_TIMEOUT => 15
+    $r = requisitar("https://api.mercadopago.com/v1/payments", $json, [
+        "Content-Type: application/json",
+        "Authorization: Bearer $mp_token"
     ]);
-    $r = curl_exec($ch);
-    curl_close($ch);
     return json_decode($r, true);
 }
 
-function gera_conta($dias){
-    $u = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'),0,8);
-    $s = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%'),0,12);
-    return [$u,$s];
-}
-
-// === INÍCIO ===
-curl_get($api."deleteWebhook");
-echo "✅ BOT INICIADO — VERSÃO SIMPLES ✅\n";
+// === LIMPA E INICIA ===
+echo "🔄 Limpando webhook...\n";
+requisitar($api."deleteWebhook");
+echo "✅ BOT INICIADO — AGORA COM LOG COMPLETO!\n";
 
 while(true){
-    $r = curl_get($api."getUpdates?offset=$offset&timeout=3");
-    $d = json_decode($r, true);
-    if(!isset($d['result'])){ usleep(50000); continue; }
+    $resp = requisitar($api."getUpdates?offset=$offset&timeout=5");
+    $dados = json_decode($resp, true);
     
-    foreach($d['result'] as $item){
-        $offset = $item['update_id'] + 1;
+    if (!isset($dados['result'])) {
+        usleep(100000);
+        continue;
+    }
+    
+    foreach ($dados['result'] as $u) {
+        $offset = $u['update_id'] + 1;
         $cid = $txt = $cb = $mid = $cbid = '';
         
-        if(isset($item['message'])){
-            $cid = $item['message']['chat']['id'];
-            $txt = trim($item['message']['text'] ?? '');
-            $mid = $item['message']['message_id'];
+        // === MENSAGEM ===
+        if (isset($u['message'])) {
+            $cid = $u['message']['chat']['id'];
+            $txt = trim($u['message']['text'] ?? '');
+            $mid = $u['message']['message_id'];
+            echo "📩 MENSAGEM de $cid: $txt\n";
         }
-        if(isset($item['callback_query'])){
-            $cb = $item['callback_query']['data'];
-            $cid = $item['callback_query']['message']['chat']['id'];
-            $mid = $item['callback_query']['message']['message_id'];
-            $cbid = $item['callback_query']['id'];
+        
+        // === CLIQUE NO BOTÃO — AQUI TÁ O PONTO! ===
+        if (isset($u['callback_query'])) {
+            $cb = $u['callback_query']['data'];
+            $cid = $u['callback_query']['message']['chat']['id'];
+            $mid = $u['callback_query']['message']['message_id'];
+            $cbid = $u['callback_query']['id'];
+            echo "🎯 CLIQUE RECEBIDO de $cid → DADO: $cb\n";
         }
-        if(!$cid) continue;
+        
+        if (!$cid) continue;
 
-        // === MENU PRINCIPAL ===
-        if($txt === '/start' || $cb === 'voltar_inicio'){
-            if($cbid) responde_clique($cid,$mid,$cbid,'');
-            $botoes = json_encode(['inline_keyboard'=>[
+        // === /START ===
+        if ($txt === '/start' || $cb === 'voltar_inicio') {
+            if ($cbid) confirmar_clique($cid, $cbid);
+            $botoes = json_encode(['inline_keyboard' => [
                 [['text'=>'🎁 TESTE GRÁTIS','callback_data'=>'/teste']],
                 [['text'=>'🛒 COMPRAR SSH','callback_data'=>'comprar_ssh']],
                 [['text'=>'🔋 RECARGA DE CELULAR','callback_data'=>'recarga_lista']],
                 [['text'=>'💰 REVENDEDOR','callback_data'=>'/revenda'],['text'=>'📋 MINHA CONTA','callback_data'=>'/minhaconta']]
             ]]);
-            curl_post($api."sendMessage", [
+            enviar_msg([
                 'chat_id' => $cid,
                 'text' => "<b>✨ TECNET 5G ✨</b>\n\nEscolha uma opção 👇",
                 'parse_mode' => 'html',
@@ -149,77 +142,65 @@ while(true){
             continue;
         }
 
-        // === COMPRAR SSH — BOTÕES GARANTIDOS ===
-        if($cb === 'comprar_ssh'){
-            responde_clique($cid,$mid,$cbid,'Abrindo planos...');
-            $botoes = ['inline_keyboard' => []];
-            foreach($planos_ssh as $k=>$p){
-                $botoes['inline_keyboard'][] = [['text'=>$p['nome'],'callback_data'=>"plano_$k"]];
+        // === COMPRAR SSH ===
+        if ($cb === 'comprar_ssh') {
+            confirmar_clique($cid, $cbid, "Abrindo planos...");
+            $kb = ['inline_keyboard' => []];
+            foreach ($planos_ssh as $k => $p) {
+                $kb['inline_keyboard'][] = [['text'=>$p['nome'],'callback_data'=>"plano_$k"]];
             }
-            $botoes['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'voltar_inicio']];
-            
-            // ENVIA MENSAGEM NOVA — GARANTE QUE APARECE!
-            curl_post($api."sendMessage", [
+            $kb['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'voltar_inicio']];
+            enviar_msg([
                 'chat_id' => $cid,
                 'text' => "🛒 <b>ESCOLHA SEU PLANO SSH</b>",
                 'parse_mode' => 'html',
-                'reply_markup' => json_encode($botoes)
+                'reply_markup' => json_encode($kb)
             ]);
             continue;
         }
 
-        // === ESCOLHEU PLANO — RESPOSTA NA HORA ===
-        if(substr($cb,0,7) === 'plano_'){
-            $chave = (int)substr($cb,7);
-            if(!isset($planos_ssh[$chave])){
-                responde_clique($cid,$mid,$cbid,'Plano inválido!');
-                curl_post($api."sendMessage", ['chat_id'=>$cid,'text'=>'❌ Plano inválido!']);
+        // === ESCOLHEU PLANO — O PONTO PRINCIPAL ===
+        if (substr($cb, 0, 7) === 'plano_') {
+            echo "🎫 PROCESSANDO PLANO: $cb\n";
+            
+            $chave = (int)substr($cb, 7);
+            if (!isset($planos_ssh[$chave])) {
+                confirmar_clique($cid, $cbid, "Plano inválido!");
+                enviar_msg(['chat_id'=>$cid,'text'=>'❌ Plano inválido!']);
                 continue;
             }
             $pl = $planos_ssh[$chave];
             
-            // PASSO 1 — Confirma o clique pro Telegram
-            responde_clique($cid,$mid,$cbid,'Gerando PIX...');
+            // ✅ PASSO 1 — CONFIRMA O CLIQUE (sem isso não funciona!)
+            confirmar_clique($cid, $cbid, "Gerando PIX...");
             
-            // PASSO 2 — MENSAGEM NOVA: "Gerando..."
-            curl_post($api."sendMessage", [
+            // ✅ PASSO 2 — AVISA AGORA
+            enviar_msg([
                 'chat_id' => $cid,
                 'text' => "⏳ Gerando PIX — Plano de {$pl['dias']} dias...\nAguarde um instante ⏱️",
                 'parse_mode' => 'html'
             ]);
             
-            // PASSO 3 — Gera o PIX
-            $mp = gera_pix($pl['valor'], "SSH {$pl['dias']} Dias", $mp_token);
+            // ✅ PASSO 3 — GERA PIX
+            $mp = gerar_pix_mp($pl['valor'], "SSH {$pl['dias']} Dias");
             $id_pag = $mp['id'] ?? '';
             $pix = $mp['point_of_interaction']['transaction_data']['qr_code'] ?? '';
             
-            if(!$id_pag || !$pix){
-                curl_post($api."sendMessage", ['chat_id'=>$cid,'text'=>'❌ Erro ao gerar PIX. Tente novamente.']);
+            if (!$id_pag || !$pix) {
+                enviar_msg(['chat_id'=>$cid,'text'=>'❌ Erro ao gerar PIX. Tente novamente.']);
                 continue;
             }
             
-            $pagamentos[$id_pag] = ['cid'=>$cid,'tipo'=>'ssh','dias'=>$pl['dias']];
+            $pagamentos[$id_pag] = ['cid'=>$cid,'dias'=>$pl['dias']];
             
-            // PASSO 4 — Mostra o PIX
-            curl_post($api."sendMessage", [
+            // ✅ PASSO 4 — MOSTRA PIX
+            enviar_msg([
                 'chat_id' => $cid,
-                'text' => "💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Plano: <b>{$pl['dias']} Dias</b>\n💰 Valor: <b>R$ ".number_format($pl['valor'],2,',','')."</b>\n\n📋 Copia e cola:\n<pre>$pix</pre>\n⏳ Após pagar, sua conta será enviada automaticamente! ✅",
-                'parse_mode' => 'html'
-            ]);
-            continue;
-        }
-
-        // === TESTE GRÁTIS ===
-        if($cb === '/teste'){
-            responde_clique($cid,$mid,$cbid,'Gerando teste...');
-            list($u,$s) = gera_conta(1);
-            curl_post($api."sendMessage", [
-                'chat_id' => $cid,
-                'text' => "✅ <b>TESTE GERADO!</b>\n👤 Usuário: <code>$u</code>\n🔑 Senha: <code>$s</code>",
+                'text' => "💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Plano: <b>{$pl['dias']} Dias</b>\n💰 Valor: <b>R$ ".number_format($pl['valor'],2,',','')."</b>\n\n📋 Copia e cola:\n<pre>$pix</pre>\n⏳ Após pagar, sua conta será enviada! ✅",
                 'parse_mode' => 'html'
             ]);
             continue;
         }
     }
-    usleep(50000);
+    usleep(10000);
 }
