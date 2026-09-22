@@ -1,23 +1,31 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+error_reporting(0);
+ini_set('display_errors', 0);
 set_time_limit(0);
-ignore_user_abort(true);
 
-// === CONFIGURAÇÃO ===
+// === CARREGA CONFIGURAÇÃO ===
+if (!file_exists('dadosBot.ini')){
+    echo "❌ ERRO: dadosBot.ini NAO ENCONTRADO!\n";
+    exit;
+}
+
 $ini = parse_ini_file('dadosBot.ini', true);
 $token = trim($ini['token'] ?? '');
 $mp_token = trim($ini['mp_token'] ?? '');
 
-if (!$token || !$mp_token) {
-    die("❌ Verifique dadosBot.ini!");
-}
+if (!$token) { echo "❌ ERRO: Token vazio!\n"; exit; }
+if (!$mp_token) { echo "❌ ERRO: mp_token vazio!\n"; exit; }
 
 $api = "https://api.telegram.org/bot$token/";
+$api_mp = "https://api.mercadopago.com/v1/payments/";
+$admin = 7761133138;
+$offset = 0;
+$sessao = [];
 $pagamentos = [];
+$teste_gratis = []; // Controle: [chat_id => "22/09/2026"]
 
-// === PLANOS ===
-$planos = [
+// === PLANOS SSH ===
+$planos_ssh = [
     1  => ['dias' => 1,  'valor' => 1.00,  'nome' => '🟢 1 Dia — R$ 1,00'],
     5  => ['dias' => 5,  'valor' => 4.00,  'nome' => '🟢 5 Dias — R$ 4,00'],
     10 => ['dias' => 10, 'valor' => 10.00, 'nome' => '🟡 10 Dias — R$ 10,00'],
@@ -25,125 +33,262 @@ $planos = [
     30 => ['dias' => 30, 'valor' => 20.00, 'nome' => '🔵 30 Dias — R$ 20,00']
 ];
 
-// === FUNÇÃO ===
-function req($url, $post = '') {
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => !!$post,
-        CURLOPT_POSTFIELDS => $post,
-        CURLOPT_RETURNTRANSFER => 1,
-        CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_TIMEOUT => 30
-    ]);
-    $r = curl_exec($ch);
-    curl_close($ch);
-    return $r;
-}
+// === RECARGAS DE CELULAR ===
+$recargas = [
+    'vivo'  => ['nome'=>'📱 VIVO',   'valores'=>[15,25,35,50,100]],
+    'claro' => ['nome'=>'📱 CLARO',  'valores'=>[10,20,30,50,80]],
+    'tim'   => ['nome'=>'📱 TIM',    'valores'=>[15,25,40,60,90]],
+    'oi'    => ['nome'=>'📱 OI',     'valores'=>[10,20,35,50]]
+];
 
-// ✅ CONFIRMA CLIQUE — SEM ISSO NÃO FUNCIONA!
-function ok_clique($id, $msg = "OK") {
+// === LIMPA WEBHOOK ===
+$ch = curl_init($api."deleteWebhook");
+curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
+curl_exec($ch); curl_close($ch);
+echo "✅ Webhook limpo!\n";
+
+// === FUNÇÕES AUXILIARES ===
+function enviar($d){
     global $api;
-    if (!$id) return;
-    req($api."answerCallbackQuery?callback_query_id=".urlencode($id)."&text=".urlencode($msg));
+    $ch = curl_init($api.'sendMessage');
+    curl_setopt_array($ch, [CURLOPT_POST=>1, CURLOPT_POSTFIELDS=>http_build_query($d),
+        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
+    curl_exec($ch); curl_close($ch);
 }
 
-function enviar($d) {
+function enviar_foto($d){
     global $api;
-    req($api."sendMessage", http_build_query($d));
+    $ch = curl_init($api.'sendPhoto');
+    curl_setopt_array($ch, [CURLOPT_POST=>1, CURLOPT_POSTFIELDS=>$d,
+        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>15]);
+    curl_exec($ch); curl_close($ch);
 }
 
-function gerar_pix($valor, $desc) {
+function editar_msg($d){
+    global $api;
+    $ch = curl_init($api.'editMessageText');
+    curl_setopt_array($ch, [CURLOPT_POST=>1, CURLOPT_POSTFIELDS=>http_build_query($d),
+        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
+    curl_exec($ch); curl_close($ch);
+}
+
+function gerar_pix_mp($valor, $descricao){
     global $mp_token;
-    $json = json_encode([
+    $pagamento = [
         "transaction_amount" => $valor,
-        "description" => $desc,
+        "description" => $descricao,
         "payment_method_id" => "pix",
-        "payer" => ["email"=>"a@b.com","first_name"=>"Cliente","last_name"=>"Telegram"]
-    ]);
-    $r = req("https://api.mercadopago.com/v1/payments", $json, [
-        "Content-Type: application/json",
-        "Authorization: Bearer $mp_token"
-    ]);
-    return json_decode($r, true);
+        "payer" => ["email" => "pagamento@bot.com", "first_name" => "Cliente", "last_name" => "Telegram"]
+    ];
+    $ch = curl_init("https://api.mercadopago.com/v1/payments");
+    curl_setopt_array($ch, [CURLOPT_POST=>1, CURLOPT_POSTFIELDS=>json_encode($pagamento),
+        CURLOPT_HTTPHEADER=>["Content-Type: application/json", "Authorization: Bearer $mp_token"],
+        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>15]);
+    $resp = curl_exec($ch); curl_close($ch);
+    return json_decode($resp, true);
 }
 
-// === INICIO ===
-req($api."deleteWebhook");
-echo "✅ BOT RODANDO — CLIQUES VÃO FUNCIONAR!\n";
+function verificar_pagamento($id_pag){
+    global $mp_token, $api_mp;
+    $ch = curl_init($api_mp.$id_pag);
+    curl_setopt_array($ch, [CURLOPT_HTTPHEADER=>["Authorization: Bearer $mp_token"],
+        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
+    $resp = curl_exec($ch); curl_close($ch);
+    if(!$resp) return false;
+    $d = json_decode($resp, true);
+    return ($d['status'] ?? '') === 'approved';
+}
 
-$offset = 0;
-while(true) {
-    $res = req($api."getUpdates?offset=$offset&timeout=5");
-    $d = json_decode($res, true);
-    if (!isset($d['result'])) { usleep(50000); continue; }
+function pode_pedir_teste($chat_id){
+    global $teste_gratis;
+    $hoje = date('d/m/Y');
+    return !isset($teste_gratis[$chat_id]) || $teste_gratis[$chat_id] !== $hoje;
+}
+
+function gerar_conta_ssh($dias_validade){
+    $usuario = substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'), 0, 8);
+    $senha = substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*'), 0, 12);
     
-    foreach ($d['result'] as $u) {
+    if(file_exists('gerarusuario.sh')){
+        @chmod('gerarusuario.sh', 0755);
+        exec("./gerarusuario.sh $usuario $senha $dias_validade 1");
+    } else {
+        exec("useradd -M -s /bin/false $usuario 2>/dev/null");
+        exec("echo \"$usuario:$senha\" | chpasswd");
+    }
+    return [$usuario, $senha];
+}
+
+echo "✅ BOT INICIADO — PIX + SSH AUTOMÁTICO ✅\n";
+
+while(true){
+    // === MONITORA PAGAMENTOS ===
+    foreach($pagamentos as $id_pag => $pedido){
+        if(verificar_pagamento($id_pag)){
+            $cid = $pedido['cid'];
+            $tipo = $pedido['tipo'];
+            
+            if($tipo === 'ssh'){
+                $dias = $pedido['dias'];
+                list($usuario, $senha) = gerar_conta_ssh($dias);
+                $data_fim = date('d/m/Y', strtotime("+$dias days"));
+                
+                enviar([
+                    'chat_id' => $cid,
+                    'text' => "✅ <b>PAGAMENTO CONFIRMADO! 🎉</b>\n\n🔐 <b>SUA CONTA SSH</b>\n👤 Usuário: <code>$usuario</code>\n🔑 Senha: <code>$senha</code>\n📅 Válido por: <b>$dias Dias</b>\n⏰ Válido até: <b>$data_fim</b>\n\nAproveite! 🚀",
+                    'parse_mode' => 'html'
+                ]);
+                
+                if($admin) enviar(['chat_id'=>$admin, 'text'=>"🔔 ✅ VENDA SSH CONFIRMADA\n📋 $dias Dias — Cliente: <code>$cid</code>\n👤 Usuário: <code>$usuario</code>", 'parse_mode'=>'html']);
+            }
+            unset($pagamentos[$id_pag]);
+        }
+    }
+
+    // === RECEBE MENSAGENS ===
+    $ch = curl_init($api."getUpdates?offset=$offset&timeout=5");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
+    $resp = curl_exec($ch); curl_close($ch);
+    if(!$resp || !($dados = json_decode($resp, true)) || !isset($dados['result'])){
+        usleep(100000); continue;
+    }
+    
+    foreach($dados['result'] as $u){
         $offset = $u['update_id'] + 1;
-        $cid = $txt = $cb = $cbid = '';
+        $cid = $txt = $cb = $mid = '';
         
-        if (isset($u['message'])) {
+        if(isset($u['message'])){
             $cid = $u['message']['chat']['id'];
             $txt = trim($u['message']['text'] ?? '');
+            $mid = $u['message']['message_id'];
         }
-        if (isset($u['callback_query'])) {
+        if(isset($u['callback_query'])){
             $cb = $u['callback_query']['data'];
             $cid = $u['callback_query']['message']['chat']['id'];
-            $cbid = $u['callback_query']['id'];
-            echo "👉 CLIQUE: $cb\n"; // ← VAI APARECER NO TERMINAL!
+            $mid = $u['callback_query']['message']['message_id'];
+            @file_get_contents($api."answerCallbackQuery?callback_query_id=".$u['callback_query']['id']."&text=Processando...");
         }
-        if (!$cid) continue;
+        if(!$cid) continue;
 
-        // === /START ===
-        if ($txt === '/start' || $cb === 'voltar_inicio') {
-            if ($cbid) ok_clique($cbid);
-            $b = json_encode(['inline_keyboard' => [
-                [['text'=>'🛒 COMPRAR SSH','callback_data'=>'comprar_ssh']],
-                [['text'=>'◀️ Voltar','callback_data'=>'voltar_inicio']]
-            ]]);
-            enviar(['chat_id'=>$cid,'text'=>"<b>Escolha:</b>",'parse_mode'=>'html','reply_markup'=>$b]);
+        // === MENU PRINCIPAL ===
+        if($txt === '/start' || $cb === 'voltar_inicio'){
+            $kb = [
+                'inline_keyboard' => [
+                    [['text'=>'🎁 TESTE GRÁTIS','callback_data'=>'/teste']],
+                    [['text'=>'🛒 COMPRAR SSH','callback_data'=>'comprar_ssh']],
+                    [['text'=>'🔋 RECARGA DE CELULAR','callback_data'=>'recarga_lista']],
+                    [['text'=>'📲 BAIXAR APK','url'=>'https://www.terabox.com'],['text'=>'👤 CRIADOR','url'=>'https://t.me/lssilvae']],
+                    [['text'=>'💰 REVENDEDOR','callback_data'=>'/revenda'],['text'=>'📋 MINHA CONTA','callback_data'=>'/minhaconta']]
+                ]
+            ];
+            
+            $texto = "<b>✨ TECNET 5G ✨</b>\n\nSeja muito bem-vindo(a)! 🚀\n\nCompre seus acessos SSH de forma rápida, segura e totalmente automática.\n\n✅ Pagamento via PIX\n✅ Entrega automática\n✅ Suporte 24 horas\n\nEscolha uma opção abaixo 👇";
+            
+            if($cb) editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>$texto,'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+            else enviar(['chat_id'=>$cid,'text'=>$texto,'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
             continue;
         }
 
-        // === ABRIR PLANOS — AQUI ESTAVA O ERRO! ===
-        if ($cb === 'comprar_ssh') {
-            ok_clique($cbid, "Abrindo..."); // ✅ CONFIRMA PRIMEIRO!
-            echo "✅ Abrindo planos para $cid\n";
-            
-            $botoes = ['inline_keyboard' => []];
-            foreach ($planos as $k => $p) {
-                $botoes['inline_keyboard'][] = [['text'=>$p['nome'],'callback_data'=>"plano_$k"]];
+        // === TESTE GRÁTIS ===
+        if($cb === '/teste'){
+            if(!pode_pedir_teste($cid)){
+                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"⛔ <b>Limite Atingido!</b>\n\nVocê já pediu um teste grátis hoje.\nTente novamente amanhã! ✅",'parse_mode'=>'html']);
+                continue;
             }
-            $botoes['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'voltar_inicio']];
-            
-            enviar([
-                'chat_id' => $cid,
-                'text' => "🛒 <b>ESCOLHA SEU PLANO:</b>",
-                'parse_mode' => 'html',
-                'reply_markup' => json_encode($botoes)
-            ]);
+            list($usuario, $senha) = gerar_conta_ssh(1);
+            $teste_gratis[$cid] = date('d/m/Y');
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"✅ <b>TESTE GERADO!</b>\n\n🔐 Dados de Acesso:\n👤 Usuário: <code>$usuario</code>\n🔑 Senha: <code>$senha</code>\n📅 Validade: <b>1 Dia</b>\n\nAproveite! 🚀",'parse_mode'=>'html']);
             continue;
         }
 
-        // === GERAR PIX ===
-        if (substr($cb, 0, 7) === 'plano_') {
-            $k = (int)substr($cb, 7);
-            if (!isset($planos[$k])) { ok_clique($cbid,"Inválido!"); continue; }
-            
-            ok_clique($cbid, "Gerando PIX..."); // ✅ CONFIRMA!
-            $pl = $planos[$k];
-            
-            enviar(['chat_id'=>$cid,'text'=>"⏳ Gerando PIX...",'parse_mode'=>'html']);
-            
-            $mp = gerar_pix($pl['valor'], "SSH {$pl['dias']} Dias");
-            $pix = $mp['point_of_interaction']['transaction_data']['qr_code'] ?? '';
-            
-            if ($pix) {
-                enviar(['chat_id'=>$cid,'text'=>"💳 PIX:\n<pre>$pix</pre>",'parse_mode'=>'html']);
-            } else {
-                enviar(['chat_id'=>$cid,'text'=>"❌ Erro. Tente novamente.",'parse_mode'=>'html']);
+        // === MENU COMPRAR SSH ===
+        if($cb === 'comprar_ssh'){
+            $kb = ['inline_keyboard' => []];
+            foreach($planos_ssh as $chave => $pl){
+                $kb['inline_keyboard'][] = [['text'=>$pl['nome'],'callback_data'=>"plano_$chave"]];
             }
+            $kb['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'voltar_inicio']];
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"🛒 <b>ESCOLHA SEU PLANO SSH</b>",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+            continue;
+        }
+
+        // === GERAR PIX DO PLANO ===
+        if(substr($cb, 0, 7) === 'plano_'){
+            $chave = (int)substr($cb, 7);
+            if(!isset($planos_ssh[$chave])) continue;
+            $pl = $planos_ssh[$chave];
+            
+            $mp = gerar_pix_mp($pl['valor'], "SSH {$pl['dias']} Dias — TecNet 5G");
+            $id_pag = $mp['id'] ?? '';
+            $pix_copia = $mp['point_of_interaction']['transaction_data']['qr_code'] ?? '';
+            
+            if(!$id_pag || !$pix_copia){
+                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'❌ Erro ao gerar PIX. Tente novamente.','parse_mode'=>'html']);
+                continue;
+            }
+            
+            $pagamentos[$id_pag] = ['cid'=>$cid,'tipo'=>'ssh','dias'=>$pl['dias']];
+            
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Plano: <b>{$pl['dias']} Dias</b>\n💰 Valor: <b>R$ ".number_format($pl['valor'],2,',','')."</b>\n\n📋 <b>Copia e cola:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, sua conta será enviada automaticamente! ✅",'parse_mode'=>'html']);
+            continue;
+        }
+
+        // === RECARGA CELULAR ===
+        if($cb === 'recarga_lista'){
+            $kb = ['inline_keyboard' => []];
+            foreach($recargas as $chave => $dados_op)
+                $kb['inline_keyboard'][] = [['text'=>$dados_op['nome'],'callback_data'=>"op_$chave"]];
+            $kb['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'voltar_inicio']];
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"<b>🔋 RECARGA DE CELULAR</b>\nEscolha a operadora 👇",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+            continue;
+        }
+        if(substr($cb, 0, 3) === 'op_'){
+            $op = substr($cb, 3);
+            if(!isset($recargas[$op])) continue;
+            $sessao[$cid]['op'] = $op;
+            $kb = ['inline_keyboard' => []];
+            foreach($recargas[$op]['valores'] as $v)
+                $kb['inline_keyboard'][] = [['text'=>"R$ ".number_format($v,2,',',''),'callback_data'=>"val_{$op}_{$v}"]];
+            $kb['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'recarga_lista']];
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"<b>{$recargas[$op]['nome']}</b>\nEscolha o valor 👇",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+            continue;
+        }
+        if(substr($cb, 0, 4) === 'val_'){
+            $partes = explode('_', $cb);
+            if(count($partes) < 3) continue;
+            list(,$op,$valor) = $partes;
+            if(!isset($recargas[$op])) continue;
+            $sessao[$cid] = ['op'=>$op,'valor'=>(float)$valor,'etapa'=>'pedir_numero'];
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"✅ Valor: <b>R$ ".number_format($valor,2,',','')."</b>\nDigite o número com DDD (ex: 11988887777):",'parse_mode'=>'html']);
+            continue;
+        }
+        if(($sessao[$cid]['etapa'] ?? '') === 'pedir_numero' && $txt){
+            $numero = preg_replace('/[^0-9]/', '', $txt);
+            if(strlen($numero)<10 || strlen($numero)>11){
+                enviar(['chat_id'=>$cid,'text'=>'❌ Inválido! Digite com DDD, só números.','parse_mode'=>'html']);
+                continue;
+            }
+            extract($sessao[$cid]);
+            $mp = gerar_pix_mp($valor, "Recarga {$recargas[$op]['nome']} - $numero");
+            $id_pag = $mp['id'] ?? '';
+            $pix_copia = $mp['point_of_interaction']['transaction_data']['qr_code'] ?? '';
+            if(!$id_pag || !$pix_copia){
+                enviar(['chat_id'=>$cid,'text'=>'❌ Erro ao gerar PIX. Tente novamente.','parse_mode'=>'html']);
+                continue;
+            }
+            $pagamentos[$id_pag] = ['cid'=>$cid,'op'=>$op,'valor'=>$valor,'numero'=>$numero,'tipo'=>'recarga'];
+            enviar(['chat_id'=>$cid,'text'=>"💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Operadora: {$recargas[$op]['nome']}\n💰 Valor: <b>R$ ".number_format($valor,2,',','')."</b>\n📱 Número: <code>$numero</code>\n\n📋 Copia e cola:\n<pre>$pix_copia</pre>\n⏳ Após pagar, a recarga pode demorar até 8 horas! ⏳",'parse_mode'=>'html']);
+            unset($sessao[$cid]);
+            continue;
+        }
+        if($cb === '/revenda'){
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'💰 <b>SEJA REVENDEDOR!</b>\nFale com @lssilvae','parse_mode'=>'html']);
+            continue;
+        }
+        if($cb === '/minhaconta'){
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'📋 <b>MINHA CONTA</b>\nEm breve!','parse_mode'=>'html']);
             continue;
         }
     }
-    usleep(10000);
+    usleep(100000);
 }
