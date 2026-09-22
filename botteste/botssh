@@ -1,7 +1,7 @@
 <?php
 error_reporting(0);
 ini_set('display_errors', 0);
-set_time_limit(0);
+set_time_limit(30); // Reduzido para não travar
 
 // === CARREGA CONFIGURAÇÃO ===
 if (!file_exists('dadosBot.ini')){
@@ -22,7 +22,7 @@ $admin = 7761133138;
 $offset = 0;
 $sessao = [];
 $pagamentos = [];
-$teste_gratis = []; // Controle: [chat_id => "22/09/2026"]
+$teste_gratis = [];
 
 // === PLANOS SSH ===
 $planos_ssh = [
@@ -56,14 +56,6 @@ function enviar($d){
     curl_exec($ch); curl_close($ch);
 }
 
-function enviar_foto($d){
-    global $api;
-    $ch = curl_init($api.'sendPhoto');
-    curl_setopt_array($ch, [CURLOPT_POST=>1, CURLOPT_POSTFIELDS=>$d,
-        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>15]);
-    curl_exec($ch); curl_close($ch);
-}
-
 function editar_msg($d){
     global $api;
     $ch = curl_init($api.'editMessageText');
@@ -83,7 +75,7 @@ function gerar_pix_mp($valor, $descricao){
     $ch = curl_init("https://api.mercadopago.com/v1/payments");
     curl_setopt_array($ch, [CURLOPT_POST=>1, CURLOPT_POSTFIELDS=>json_encode($pagamento),
         CURLOPT_HTTPHEADER=>["Content-Type: application/json", "Authorization: Bearer $mp_token"],
-        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>15]);
+        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
     $resp = curl_exec($ch); curl_close($ch);
     return json_decode($resp, true);
 }
@@ -92,7 +84,7 @@ function verificar_pagamento($id_pag){
     global $mp_token, $api_mp;
     $ch = curl_init($api_mp.$id_pag);
     curl_setopt_array($ch, [CURLOPT_HTTPHEADER=>["Authorization: Bearer $mp_token"],
-        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
+        CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>8]);
     $resp = curl_exec($ch); curl_close($ch);
     if(!$resp) return false;
     $d = json_decode($resp, true);
@@ -146,11 +138,11 @@ while(true){
     }
 
     // === RECEBE MENSAGENS ===
-    $ch = curl_init($api."getUpdates?offset=$offset&timeout=5");
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>10]);
+    $ch = curl_init($api."getUpdates?offset=$offset&timeout=3");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>1, CURLOPT_SSL_VERIFYPEER=>0, CURLOPT_TIMEOUT=>8]);
     $resp = curl_exec($ch); curl_close($ch);
     if(!$resp || !($dados = json_decode($resp, true)) || !isset($dados['result'])){
-        usleep(100000); continue;
+        usleep(50000); continue; // Mais rápido: 0.05s em vez de 0.1s
     }
     
     foreach($dados['result'] as $u){
@@ -166,6 +158,7 @@ while(true){
             $cb = $u['callback_query']['data'];
             $cid = $u['callback_query']['message']['chat']['id'];
             $mid = $u['callback_query']['message']['message_id'];
+            // ✅ Responde IMEDIATAMENTE ao clique
             @file_get_contents($api."answerCallbackQuery?callback_query_id=".$u['callback_query']['id']."&text=Processando...");
         }
         if(!$cid) continue;
@@ -212,24 +205,38 @@ while(true){
             continue;
         }
 
-        // === GERAR PIX DO PLANO ===
+        // === GERAR PIX DO PLANO — OTIMIZADO ===
         if(substr($cb, 0, 7) === 'plano_'){
             $chave = (int)substr($cb, 7);
-            if(!isset($planos_ssh[$chave])) continue;
+            if(!isset($planos_ssh[$chave])) {
+                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
+                    'text'=>'❌ Plano inválido!','parse_mode'=>'html']);
+                continue;
+            }
             $pl = $planos_ssh[$chave];
             
+            // ✅ AVISA NA HORA — não deixa o usuário esperando sem resposta
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
+                'text'=>"⏳ Gerando PIX — Plano de {$pl['dias']} dias...",
+                'parse_mode'=>'html']);
+            
+            // Agora gera o PIX
             $mp = gerar_pix_mp($pl['valor'], "SSH {$pl['dias']} Dias — TecNet 5G");
             $id_pag = $mp['id'] ?? '';
             $pix_copia = $mp['point_of_interaction']['transaction_data']['qr_code'] ?? '';
             
             if(!$id_pag || !$pix_copia){
-                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'❌ Erro ao gerar PIX. Tente novamente.','parse_mode'=>'html']);
+                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
+                    'text'=>'❌ Erro ao gerar PIX. Tente novamente.',
+                    'parse_mode'=>'html']);
                 continue;
             }
             
             $pagamentos[$id_pag] = ['cid'=>$cid,'tipo'=>'ssh','dias'=>$pl['dias']];
             
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Plano: <b>{$pl['dias']} Dias</b>\n💰 Valor: <b>R$ ".number_format($pl['valor'],2,',','')."</b>\n\n📋 <b>Copia e cola:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, sua conta será enviada automaticamente! ✅",'parse_mode'=>'html']);
+            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,
+                'text'=>"💳 <b>PAGAMENTO VIA PIX</b>\n\n📋 Plano: <b>{$pl['dias']} Dias</b>\n💰 Valor: <b>R$ ".number_format($pl['valor'],2,',','')."</b>\n\n📋 <b>Copia e cola:</b>\n<pre>$pix_copia</pre>\n\n⏳ Após pagar, sua conta será enviada automaticamente! ✅",
+                'parse_mode'=>'html']);
             continue;
         }
 
@@ -290,5 +297,5 @@ while(true){
             continue;
         }
     }
-    usleep(100000);
+    usleep(50000); // Verifica 2x mais rápido!
 }
