@@ -1,0 +1,1 @@
+Adiciona bot copiador de operações
