@@ -2,10 +2,12 @@
 error_reporting(0);
 ini_set('display_errors', 0);
 set_time_limit(0);
+ini_set('default_socket_timeout', 3);
+ini_set('memory_limit', '128M');
 
 // === CARREGA CONFIGURAÇÃO ===
 if (!file_exists('dadosBot.ini')){
-    echo "❌ ERRO: dadosBot.ini NAO ENCONTRADO!\n";
+    echo "❌ ERRO: dadosBot.ini NÃO ENCONTRADO!\n";
     exit;
 }
 
@@ -30,16 +32,18 @@ $recargas = [
     'oi'    => ['nome'=>'📱 OI',     'valores'=>[10,20,35,50]]
 ];
 
-// === LIMPA WEBHOOK AUTOMATICAMENTE ===
+// === LIMPA WEBHOOK ===
 $ch = curl_init($api."deleteWebhook");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => 1,
     CURLOPT_SSL_VERIFYPEER => 0,
-    CURLOPT_TIMEOUT => 10
+    CURLOPT_TIMEOUT => 5,
+    CURLOPT_CONNECTTIMEOUT => 2
 ]);
 curl_exec($ch); curl_close($ch);
 echo "✅ Webhook limpo!\n";
 
+// === FUNÇÕES OTIMIZADAS ===
 function enviar($d){
     global $api;
     $ch = curl_init($api.'sendMessage');
@@ -48,8 +52,9 @@ function enviar($d){
         CURLOPT_POSTFIELDS => http_build_query($d),
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 10
+        CURLOPT_TIMEOUT => 4,
+        CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TCP_NODELAY => true
     ]);
     curl_exec($ch); curl_close($ch);
 }
@@ -62,8 +67,32 @@ function editar_msg($d){
         CURLOPT_POSTFIELDS => http_build_query($d),
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 10
+        CURLOPT_TIMEOUT => 4,
+        CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TCP_NODELAY => true
+    ]);
+    curl_exec($ch); curl_close($ch);
+}
+
+function responder_callback($cid, $mid, $texto, $botoes=null){
+    global $api;
+    $dados = [
+        'chat_id' => $cid,
+        'message_id' => $mid,
+        'text' => $texto,
+        'parse_mode' => 'html'
+    ];
+    if($botoes) $dados['reply_markup'] = json_encode($botoes);
+    
+    $ch = curl_init($api.'editMessageText');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => 1,
+        CURLOPT_POSTFIELDS => http_build_query($dados),
+        CURLOPT_RETURNTRANSFER => 1,
+        CURLOPT_SSL_VERIFYPEER => 0,
+        CURLOPT_TIMEOUT => 3,
+        CURLOPT_CONNECTTIMEOUT => 1,
+        CURLOPT_TCP_NODELAY => true
     ]);
     curl_exec($ch); curl_close($ch);
 }
@@ -83,8 +112,8 @@ function gerar_pix_mp($valor, $descricao){
         CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer $mp_token"],
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 15
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_CONNECTTIMEOUT => 2
     ]);
     $resp = curl_exec($ch); curl_close($ch);
     return json_decode($resp, true);
@@ -97,8 +126,8 @@ function verificar_pagamento($id_pag){
         CURLOPT_HTTPHEADER => ["Authorization: Bearer $mp_token"],
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 10
+        CURLOPT_TIMEOUT => 5,
+        CURLOPT_CONNECTTIMEOUT => 2
     ]);
     $resp = curl_exec($ch); curl_close($ch);
     if(!$resp) return false;
@@ -106,10 +135,10 @@ function verificar_pagamento($id_pag){
     return ($d['status'] ?? '') === 'approved';
 }
 
-echo "✅ BOT INICIADO — PIX AUTOMÁTICO\n";
+echo "✅ BOT INICIADO — VELOCIDADE MÁXIMA ⚡\n";
 
 while(true){
-    // === MONITORA PAGAMENTOS ===
+    // === MONITORA PAGAMENTOS (ciclo curto) ===
     foreach($pagamentos as $id_pag => $pedido){
         if(verificar_pagamento($id_pag)){
             $cid = $pedido['cid'];
@@ -135,24 +164,24 @@ while(true){
         }
     }
 
-    // === RECEBE MENSAGENS ===
-    $ch = curl_init($api."getUpdates?offset=$offset&timeout=5");
+    // === RECEBE ATUALIZAÇÕES — TEMPO MÍNIMO ===
+    $ch = curl_init($api."getUpdates?offset=$offset&timeout=1");
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => 1,
         CURLOPT_SSL_VERIFYPEER => 0,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 10
+        CURLOPT_TIMEOUT => 3,
+        CURLOPT_CONNECTTIMEOUT => 1
     ]);
     $resp = curl_exec($ch); curl_close($ch);
     
     if(!$resp){
-        usleep(100000);
+        usleep(50000); // 0.05s — METADE do atraso original!
         continue;
     }
     
     $dados = json_decode($resp, true);
     if(!isset($dados['result']) || !is_array($dados['result'])){
-        usleep(100000);
+        usleep(50000);
         continue;
     }
     
@@ -169,7 +198,8 @@ while(true){
             $cb = $u['callback_query']['data'];
             $cid = $u['callback_query']['message']['chat']['id'];
             $mid = $u['callback_query']['message']['message_id'];
-            @file_get_contents($api."answerCallbackQuery?callback_query_id=".$u['callback_query']['id']."&text=Aguardando pagamento...");
+            // Resposta IMEDIATA ao clique do botão
+            @file_get_contents($api."answerCallbackQuery?callback_query_id=".$u['callback_query']['id']."&text=OK&cache_time=1");
         }
         if(!$cid) continue;
 
@@ -184,10 +214,11 @@ while(true){
                     [['text'=>'💰 REVENDEDOR','callback_data'=>'/revenda'],['text'=>'📋 MINHA CONTA','callback_data'=>'/minhaconta']]
                 ]
             ];
+            $texto = "<b>✨ BEM-VINDO AO SISTEMA ✨</b>\nEscolha o que deseja fazer 👇";
             if($cb){
-                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"<b>✨ BEM-VINDO AO SISTEMA ✨</b>\nEscolha o que deseja fazer 👇",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+                responder_callback($cid, $mid, $texto, $kb);
             } else {
-                enviar(['chat_id'=>$cid,'text'=>"<b>✨ BEM-VINDO AO SISTEMA ✨</b>\nEscolha o que deseja fazer 👇",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+                enviar(['chat_id'=>$cid,'text'=>$texto,'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
             }
             continue;
         }
@@ -199,7 +230,7 @@ while(true){
                 $kb['inline_keyboard'][] = [['text'=>$dados_op['nome'],'callback_data'=>"op_$chave"]];
             }
             $kb['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'recarga_voltar']];
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"<b>🔋 RECARGA DE CELULAR</b>\nEscolha a operadora 👇",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+            responder_callback($cid, $mid, "<b>🔋 RECARGA DE CELULAR</b>\nEscolha a operadora 👇", $kb);
             continue;
         }
 
@@ -218,7 +249,7 @@ while(true){
             }
             $kb['inline_keyboard'][] = [['text'=>'◀️ Voltar','callback_data'=>'recarga_lista']];
             
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"<b>{$recargas[$op]['nome']}</b>\nEscolha o valor 👇",'parse_mode'=>'html','reply_markup'=>json_encode($kb)]);
+            responder_callback($cid, $mid, "<b>{$recargas[$op]['nome']}</b>\nEscolha o valor 👇", $kb);
             continue;
         }
 
@@ -234,7 +265,7 @@ while(true){
             $sessao[$cid]['valor'] = $valor;
             $sessao[$cid]['etapa'] = 'pedir_numero';
             
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"✅ Valor: <b>R$ ".number_format($valor,2,',','')."</b>\nDigite o número com DDD (ex: 11988887777):",'parse_mode'=>'html']);
+            responder_callback($cid, $mid, "✅ Valor: <b>R$ ".number_format($valor,2,',','')."</b>\nDigite o número com DDD (ex: 11988887777):");
             continue;
         }
 
@@ -282,15 +313,15 @@ while(true){
             if(file_exists('gerarusuario.sh')){
                 exec("./gerarusuario.sh $usuario $senha 1 1");
             } else {
-                exec("useradd -M -s /bin/false $usuario && echo \"$usuario:$senha\" | chpasswd");
+                exec("useradd -M -s /bin/false $usuario 2>/dev/null && echo \"$usuario:$senha\" | chpasswd 2>/dev/null");
             }
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"✅ <b>CONTA CRIADA!</b>\nUsuário: <code>$usuario</code>\nSenha: <code>$senha</code>\nValidade: 1 dia",'parse_mode'=>'html']);
+            responder_callback($cid, $mid, "✅ <b>CONTA CRIADA!</b>\nUsuário: <code>$usuario</code>\nSenha: <code>$senha</code>\nValidade: 1 dia");
             continue;
         }
 
         // === PIX 30 DIAS ===
         if($cb === '/pix'){
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'⏳ Gerando PIX...','parse_mode'=>'html']);
+            responder_callback($cid, $mid, '⏳ Gerando PIX...');
             $pagamento = [
                 "transaction_amount" => 20.00,
                 "description" => "Acesso 30 Dias",
@@ -304,7 +335,8 @@ while(true){
                 CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer $mp_token"],
                 CURLOPT_RETURNTRANSFER => 1,
                 CURLOPT_SSL_VERIFYPEER => 0,
-                CURLOPT_TIMEOUT => 10
+                CURLOPT_TIMEOUT => 6,
+                CURLOPT_CONNECTTIMEOUT => 2
             ]);
             $resp_mp = curl_exec($ch); curl_close($ch);
             $dados_mp = json_decode($resp_mp, true);
@@ -312,21 +344,22 @@ while(true){
             $id_pag = $dados_mp['id'] ?? '';
             
             if($pix_copia && $id_pag){
-                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>"💵 <b>PIX GERADO!</b>\nCopie e pague:\n<code>$pix_copia</code>",'parse_mode'=>'html']);
+                $pagamentos[$id_pag] = ['cid'=>$cid,'op'=>'pix30','valor'=>20,'numero'=>''];
+                responder_callback($cid, $mid, "💵 <b>PIX GERADO!</b>\nCopie e pague:\n<code>$pix_copia</code>");
             } else {
-                editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'❌ Erro ao gerar PIX','parse_mode'=>'html']);
+                responder_callback($cid, $mid, '❌ Erro ao gerar PIX');
             }
             continue;
         }
 
         if($cb === '/revenda'){
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'💰 <b>SEJA REVENDEDOR!</b>\nFale com @lssilvae','parse_mode'=>'html']);
+            responder_callback($cid, $mid, '💰 <b>SEJA REVENDEDOR!</b>\nFale com @lssilvae');
             continue;
         }
         if($cb === '/minhaconta'){
-            editar_msg(['chat_id'=>$cid,'message_id'=>$mid,'text'=>'📋 <b>MINHA CONTA</b>\nEm breve!','parse_mode'=>'html']);
+            responder_callback($cid, $mid, '📋 <b>MINHA CONTA</b>\nEm breve!');
             continue;
         }
     }
-    usleep(100000);
+    usleep(50000); // 0.05s — resposta rápida!
 }
